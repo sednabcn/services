@@ -1,0 +1,6 @@
+python-docx
+pandas
+openpyxl
+gspread
+oauth2client
+PyGithub

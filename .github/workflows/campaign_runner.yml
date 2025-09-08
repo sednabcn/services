@@ -1,0 +1,52 @@
+name: Email GitHub Campaign System
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 8 * * *"   # Daily at 08:00 UTC
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  campaign-runner:
+    runs-on: ubuntu-latest
+    env:
+      ALERT_EMAIL: alerts@modelphysmat.com
+      TRACKING_DIR: tracking
+      SCHEDULED_DIR: scheduled-campaigns
+      TEMPLATES_DIR: campaign-templates
+      CONTACTS_DIR: contacts
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare Google creds (optional)
+        if: env.GOOGLE_SVC_JSON != ''
+        run: .github/scripts/prepare_google_creds.sh "${GOOGLE_SVC_JSON}"
+
+      - name: Run campaign processor
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_SVC_JSON_PATH: /tmp/google_svc.json
+        run: |
+          python utils/docx_parser.py \
+            --templates "$TEMPLATES_DIR" \
+            --contacts "$CONTACTS_DIR" \
+            --scheduled "$SCHEDULED_DIR" \
+            --tracking "$TRACKING_DIR" \
+            --alerts "$ALERT_EMAIL"
