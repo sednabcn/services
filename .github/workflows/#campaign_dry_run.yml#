@@ -1,9 +1,8 @@
 name: Email GitHub Campaign System (DRY-RUN)
-
 on:
   push:
     branches: ["master"]
-  workflow_dispatch:
+  workflow_dispatch:  # Optional: allows manual triggering
 
 jobs:
   dry-run:
@@ -16,132 +15,152 @@ jobs:
       CONTACTS_DIR: contacts
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-
+      
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install pandas requests python-docx openpyxl || true
+          pip install --upgrade pip
+          # Install basic dependencies that are likely to be needed
+          pip install pandas requests python-docx openpyxl
+          # Install from requirements.txt if it exists
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
-            echo "No requirements.txt found; using basic dependencies"
+            echo "No requirements.txt found, using basic dependencies"
           fi
-
+      
       - name: Create directories if they don't exist
         run: |
-          mkdir -p "$TEMPLATES_DIR" "$CONTACTS_DIR" "$SCHEDULED_DIR" "$TRACKING_DIR"
+          mkdir -p "$TEMPLATES_DIR"
+          mkdir -p "$CONTACTS_DIR" 
+          mkdir -p "$SCHEDULED_DIR"
+          mkdir -p "$TRACKING_DIR"
           echo "Created necessary directories"
-
+      
       - name: Create test data (if directories are empty)
         run: |
-          if [ -z "$(ls -A "$CONTACTS_DIR" 2>/dev/null)" ]; then
-            cat > "$CONTACTS_DIR/test_contacts.csv" <<'EOF'
-name,email,company
-John Doe,john.doe@example.com,Test Corp
-Jane Smith,jane.smith@example.com,Demo Inc
-Bob Johnson,bob.johnson@example.com,Sample LLC
-Alice Williams,alice.williams@example.com,Alpha Ltd
-Charlie Brown,charlie.brown@example.com,Beta Corp
-EOF
+          # Create test contacts if contacts directory is empty
+          if [ -z "$(ls -A $CONTACTS_DIR 2>/dev/null)" ]; then
+            echo "Creating test contact data..."
+            cat > "$CONTACTS_DIR/test_contacts.csv" << 'EOF'
+          name,email,company
+          John Doe,john.doe@example.com,Test Corp
+          Jane Smith,jane.smith@example.com,Demo Inc
+          Bob Johnson,bob.johnson@example.com,Sample LLC
+          Alice Williams,alice.williams@example.com,Alpha Ltd
+          Charlie Brown,charlie.brown@example.com,Beta Corp
+          EOF
             echo "Test contacts created"
           fi
-
-          if [ -z "$(ls -A "$SCHEDULED_DIR" 2>/dev/null)" ]; then
-            cat > "$SCHEDULED_DIR/welcome_campaign.txt" <<'EOF'
-Subject: Welcome to Our Service
-
-Hello {name},
-
-Welcome to our service! We're excited to have you on board.
-
-This is a test email campaign running in dry-run mode.
-
-Best regards,
-The Team
-EOF
+          
+          # Create test campaign if scheduled directory is empty
+          if [ -z "$(ls -A $SCHEDULED_DIR 2>/dev/null)" ]; then
+            echo "Creating test campaign..."
+            cat > "$SCHEDULED_DIR/welcome_campaign.txt" << 'EOF'
+          Subject: Welcome to Our Service
+          
+          Hello {name},
+          
+          Welcome to our service! We're excited to have you on board.
+          
+          This is a test email campaign running in dry-run mode.
+          
+          Best regards,
+          The Team
+          EOF
             echo "Test campaign created"
           fi
-
-      - name: Dry Run Campaign Processor (capture logs)
+      
+      - name: Dry Run Campaign Processor
         run: |
-          # Run the dry-run and capture stdout/stderr into files so we can upload them later.
           python utils/docx_parser.py \
             --templates "$TEMPLATES_DIR" \
             --contacts "$CONTACTS_DIR" \
             --scheduled "$SCHEDULED_DIR" \
             --tracking "$TRACKING_DIR" \
             --alerts "$ALERT_EMAIL" \
-            --dry-run > dryrun.log 2> error.log || true
-          echo "Dry run completed (stdout -> dryrun.log, stderr -> error.log)"
-
+            --dry-run
+      
       - name: Debug - List created files
         run: |
-          echo "Workspace root files:"
-          ls -la || true
+          echo "Files in current directory:"
+          ls -la
           echo ""
-          echo "Contents of $TRACKING_DIR (if present):"
+          echo "Files in tracking directory:"
           if [ -d "$TRACKING_DIR" ]; then
-            ls -la "$TRACKING_DIR" || true
-          else
-            echo "$TRACKING_DIR does not exist"
+            ls -la "$TRACKING_DIR"
           fi
           echo ""
-          echo "Find any .log files:"
-          find . -type f -name "*.log" -print || echo "No log files found"
-
+          echo "Looking for log files:"
+          find . -name "*.log" -type f 2>/dev/null || echo "No log files found"
+          echo ""
+          echo "Contents of any .log files found:"
+          for logfile in *.log; do
+            if [ -f "$logfile" ]; then
+              echo "--- Contents of $logfile ---"
+              cat "$logfile"
+              echo "--- End of $logfile ---"
+              echo ""
+            fi
+          done
+      
       - name: Generate Campaign Summary
         run: |
           echo "## 📋 Dry-Run Campaign Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Campaign Execution Details:**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
+          
+          # Check if dryrun.log exists and has content
           if [ -f "dryrun.log" ] && [ -s "dryrun.log" ]; then
             echo "### 📊 Campaign Results" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
             echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-
-            TOTAL_CONTACTS=$(grep -m1 "Total contacts loaded:" dryrun.log | awk '{print $4}' || echo "0")
+            
+            # Extract total contacts
+            TOTAL_CONTACTS=$(grep "Total contacts loaded:" dryrun.log | head -1 | awk '{print $4}' || echo "0")
             echo "| Total Contacts | $TOTAL_CONTACTS |" >> $GITHUB_STEP_SUMMARY
-
-            TOTAL_CAMPAIGNS=$(grep -m1 "Total campaigns processed:" dryrun.log | awk '{print $4}' || echo "0")
+            
+            # Extract total campaigns
+            TOTAL_CAMPAIGNS=$(grep "Total campaigns processed:" dryrun.log | head -1 | awk '{print $4}' || echo "0")
             echo "| Campaigns Processed | $TOTAL_CAMPAIGNS |" >> $GITHUB_STEP_SUMMARY
-
-            RUN_MODE=$(grep -m1 "Run mode:" dryrun.log | awk '{print $3}' || echo "UNKNOWN")
+            
+            # Extract run mode
+            RUN_MODE=$(grep "Run mode:" dryrun.log | head -1 | awk '{print $3}' || echo "UNKNOWN")
             echo "| Run Mode | $RUN_MODE |" >> $GITHUB_STEP_SUMMARY
+            
             echo "" >> $GITHUB_STEP_SUMMARY
-
+            
+            # Individual campaigns table
             if [ "$TOTAL_CAMPAIGNS" != "0" ]; then
               echo "### 📧 Individual Campaigns" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "| Campaign | Recipients | Status |" >> $GITHUB_STEP_SUMMARY
               echo "|----------|------------|--------|" >> $GITHUB_STEP_SUMMARY
-
+              
+              # Parse campaign entries from log
               awk '
-                /^Campaign:/ {
-                  campaign = $2;
-                  getline;
-                  if (/^Recipients:/) recipients = $2;
-                  getline; getline;
-                  if (/^Status:/) {
-                    status = "";
-                    for (i=2;i<=NF;i++) status = status " " $i
-                  }
-                  print "| " campaign " | " recipients " | " status " |";
+                /^Campaign:/ { 
+                  campaign = $2; 
+                  getline; 
+                  if (/^Recipients:/) recipients = $2; 
+                  getline; 
+                  getline; 
+                  if (/^Status:/) status = $2 " " $3 " " $4 " " $5; 
+                  print "| " campaign " | " recipients " | " status " |"; 
                 }
-              ' dryrun.log >> $GITHUB_STEP_SUMMARY || true
+              ' dryrun.log >> $GITHUB_STEP_SUMMARY
             fi
-
-            if grep -q "Sample recipients:" dryrun.log 2>/dev/null; then
-              echo "" >> $GITHUB_STEP_SUMMARY
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Sample recipients if available
+            if grep -q "Sample recipients:" dryrun.log; then
               echo "### 👥 Sample Recipients (First 5)" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               echo '```' >> $GITHUB_STEP_SUMMARY
@@ -149,7 +168,7 @@ EOF
               echo '```' >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
             fi
-
+            
           else
             echo "### ❌ No Campaign Results" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -159,7 +178,8 @@ EOF
             echo "| Possible Issues | No campaigns scheduled or processing error |" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
-
+          
+          # Check for error log
           if [ -f "error.log" ] && [ -s "error.log" ]; then
             echo "### 🚨 Errors Encountered" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -168,7 +188,8 @@ EOF
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
-
+          
+          # Add execution metadata
           echo "### 🔧 Execution Metadata" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
@@ -178,17 +199,7 @@ EOF
           echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Timestamp | $(date -u) |" >> $GITHUB_STEP_SUMMARY
           echo "| Runner | ${{ runner.os }} |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Ensure placeholders for artifact upload
-        run: |
-          mkdir -p "$TRACKING_DIR"
-          # If tracking dir is empty, create a .keep so upload-artifact has something to upload
-          if [ -z "$(ls -A "$TRACKING_DIR" 2>/dev/null)" ]; then
-            touch "$TRACKING_DIR/.keep"
-          fi
-          # Ensure log files exist so upload step doesn't complain
-          : > dryrun.log
-          : > error.log
+          
 
       - name: Upload logs as artifacts
         if: always()
@@ -196,8 +207,6 @@ EOF
         with:
           name: campaign-logs
           path: |
-            dryrun.log
-            error.log
-            tracking/**
+            *.log
+            tracking/
           retention-days: 7
-          if-no-files-found: ignore
