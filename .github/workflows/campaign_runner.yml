@@ -1,7 +1,7 @@
 name: Email GitHub Campaign System
 
 on:
-    push:
+  push:
     branches: ["master"]
   workflow_dispatch:
   schedule:

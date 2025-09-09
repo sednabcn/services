@@ -1,12 +1,12 @@
 name: Reply Tracker
 
+
 on:
     push:
-    branches: ["master"]
-
+      branches: ["master"]
+    workflow_dispatch:
   schedule:
     - cron: "*/30 * * * *"   # every 30 minutes
-  workflow_dispatch:
 
 jobs:
   track-replies:
