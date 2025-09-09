@@ -1,6 +1,8 @@
 name: Email GitHub Campaign System (DRY-RUN)
 
 on:
+    push:
+      branches: ["master"]
   workflow_dispatch:
 
 jobs:

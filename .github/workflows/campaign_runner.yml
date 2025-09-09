@@ -1,6 +1,8 @@
 name: Email GitHub Campaign System
 
 on:
+    push:
+    branches: ["master"]
   workflow_dispatch:
   schedule:
     - cron: "0 8 * * *"   # Daily at 08:00 UTC
