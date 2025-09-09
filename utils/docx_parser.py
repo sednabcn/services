@@ -1,5 +1,6 @@
 # add to imports
 import argparse
+import os
 
 # inside campaign_main
 def campaign_main(templates_root, contacts_root, scheduled_root, tracking_root, alerts_email, dry_run=False):
