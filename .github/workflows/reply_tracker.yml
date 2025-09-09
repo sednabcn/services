@@ -19,6 +19,6 @@ jobs:
           IMAP_HOST: ${{ secrets.IMAP_HOST }}
           IMAP_USER: ${{ secrets.IMAP_USER }}
           IMAP_PASS: ${{ secrets.IMAP_PASS }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           python utils/reply_tracker.py tracking
