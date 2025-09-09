@@ -71,11 +71,13 @@ jobs:
           pip list | grep -E "(requests|pandas|python-docx|smtplib)"
 
       - name: Setup Google credentials (safe + strict check)
-        if: ${{ secrets.GOOGLE_SVC_JSON != '' }}
+        env:
+          GOOGLE_SVC_JSON: ${{ secrets.GOOGLE_SVC_JSON }}
+        if: ${{ env.GOOGLE_SVC_JSON != '' }}
         run: |
           set -euo pipefail
           
-          SECRET='${{ secrets.GOOGLE_SVC_JSON }}'
+          SECRET="$GOOGLE_SVC_JSON"
 
           # Detect raw JSON vs base64
           if echo "$SECRET" | head -c 1 | grep -q '{'; then
