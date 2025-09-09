@@ -121,9 +121,9 @@ jobs:
           echo "Directory structure created"
           
       - name: Setup Google credentials
-        if: ${{ secrets.GOOGLE_SVC_JSON != '' }}
+        if: ${{ env.GOOGLE_SVC_JSON != '' }}
         run: |
-          echo '${{ secrets.GOOGLE_SVC_JSON }}' | base64 -d > docs/google_svc.json
+          echo '${{ env.GOOGLE_SVC_JSON }}' | base64 -d > docs/google_svc.json
           chmod 600 docs/google_svc.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/docs/google_svc.json" >> $GITHUB_ENV
           
