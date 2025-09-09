@@ -31,30 +31,6 @@ jobs:
             --alerts "$ALERT_EMAIL" \
             --dry-run
       
-      - name: Debug - List created files
-        run: |
-          echo "Files in current directory:"
-          ls -la
-          echo ""
-          echo "Looking for log files:"
-          find . -name "*.log" -type f
-          echo ""
-          echo "Contents of any .log files found:"
-          for logfile in *.log; do
-            if [ -f "$logfile" ]; then
-              echo "--- Contents of $logfile ---"
-              cat "$logfile"
-              echo "--- End of $logfile ---"
-            fi
-          done
-      
-      - name: Test Summary (Simple)
-        run: |
-          echo "## 🧪 Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "This is a test summary to verify GITHUB_STEP_SUMMARY works" >> $GITHUB_STEP_SUMMARY
-          echo "Current time: $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-      
       - name: Generate Summary
         run: |
           echo "## 📋 Dry-Run Campaign Summary" >> $GITHUB_STEP_SUMMARY
