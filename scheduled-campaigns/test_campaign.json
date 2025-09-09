@@ -1,0 +1,17 @@
+{
+  "name": "Test Campaign",
+  "sector": "education",
+  "templates": ["outreach.docx"],
+  "contacts": "contacts/client_test.url",
+  "mode": "schedule_later",
+  "date": "2025-09-11",
+  "from_email": "campaigns@yourdomain.com",
+  "from_name": "Outreach Team",
+  "subject": "Collaboration Opportunity Test",
+  "defaults": {
+    "Status": "Pending",
+    "Follow-up": "TBD",
+    "Region": "Global",
+    "Notes": ""
+  }
+}
