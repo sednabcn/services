@@ -42,30 +42,30 @@ jobs:
       - name: Create test data (if directories are empty)
         run: |
           if [ -z "$(ls -A "$CONTACTS_DIR" 2>/dev/null)" ]; then
-            cat > "$CONTACTS_DIR/test_contacts.csv" <<'EOF'
-name,email,company
-John Doe,john.doe@example.com,Test Corp
-Jane Smith,jane.smith@example.com,Demo Inc
-Bob Johnson,bob.johnson@example.com,Sample LLC
-Alice Williams,alice.williams@example.com,Alpha Ltd
-Charlie Brown,charlie.brown@example.com,Beta Corp
-EOF
+            cat > "$CONTACTS_DIR/test_contacts.csv" << 'EOF'
+          name,email,company
+          John Doe,john.doe@example.com,Test Corp
+          Jane Smith,jane.smith@example.com,Demo Inc
+          Bob Johnson,bob.johnson@example.com,Sample LLC
+          Alice Williams,alice.williams@example.com,Alpha Ltd
+          Charlie Brown,charlie.brown@example.com,Beta Corp
+          EOF
             echo "Test contacts created"
           fi
 
           if [ -z "$(ls -A "$SCHEDULED_DIR" 2>/dev/null)" ]; then
-            cat > "$SCHEDULED_DIR/welcome_campaign.txt" <<'EOF'
-Subject: Welcome to Our Service
+            cat > "$SCHEDULED_DIR/welcome_campaign.txt" << 'EOF'
+          Subject: Welcome to Our Service
 
-Hello {name},
+          Hello {name},
 
-Welcome to our service! We're excited to have you on board.
+          Welcome to our service! We're excited to have you on board.
 
-This is a test email campaign running in dry-run mode.
+          This is a test email campaign running in dry-run mode.
 
-Best regards,
-The Team
-EOF
+          Best regards,
+          The Team
+          EOF
             echo "Test campaign created"
           fi
 
