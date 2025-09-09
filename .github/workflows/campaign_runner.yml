@@ -49,4 +49,19 @@ jobs:
             --contacts "$CONTACTS_DIR" \
             --scheduled "$SCHEDULED_DIR" \
             --tracking "$TRACKING_DIR" \
-            --alerts "$ALERT_EMAIL"
+            --alerts "$ALERT_EMAIL" | tee prod.log
+
+      - name: Generate Summary
+        run: |
+          echo "## 🚀 Production Campaign Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Campaign | Sent | Failed | Tracking File |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|--------|---------------|" >> $GITHUB_STEP_SUMMARY
+          grep "Campaign:" prod.log | while read -r line; do
+            campaign=$(echo "$line" | awk '{print $2}')
+            sent=$(grep -A1 "$line" prod.log | tail -n1 | awk '{print $2}')
+            failed=$(grep -A2 "$line" prod.log | tail -n1 | awk '{print $2}')
+            tracking="tracking/${campaign}_$(date +%F).json"
+            echo "| $campaign | $sent | $failed | $tracking |" >> $GITHUB_STEP_SUMMARY
+          done
+

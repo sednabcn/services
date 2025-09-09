@@ -29,3 +29,15 @@ jobs:
             --tracking "$TRACKING_DIR" \
             --alerts "$ALERT_EMAIL" \
             --dry-run
+
+      - name: Generate Summary
+        run: |
+          echo "## 📋 Dry-Run Campaign Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Campaign | Recipients | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          grep "Campaign:" dryrun.log | while read -r line; do
+            campaign=$(echo "$line" | awk '{print $2}')
+            recipients=$(grep -A1 "$line" dryrun.log | tail -n1 | awk '{print $2}')
+            echo "| $campaign | $recipients | SIMULATED |" >> $GITHUB_STEP_SUMMARY
+          done
