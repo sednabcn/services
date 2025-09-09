@@ -31,6 +31,12 @@ except ImportError:
     DOCX_AVAILABLE = False
     print("Warning: python-docx library not available")
 
+try:
+    import email_sender
+    EMAIL_SENDER_AVAILABLE = True
+except ImportError:
+    EMAIL_SENDER_AVAILABLE = False
+    
 # Simple EmailSender fallback if module not available
 try:
     from email_sender import EmailSender
