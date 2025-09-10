@@ -358,10 +358,6 @@ jobs:
 
           python -c "import sys, importlib; modules = ['requests','pandas','docx','csv','json','smtplib','hashlib','uuid']; [importlib.import_module(m) for m in modules]"
 
-          python -c "
-import sys, importlib
-modules = ['requests','pandas','docx','csv','json','smtplib','hashlib','uuid']
-
       # 🔥 FINAL PRE-EXECUTION VALIDATION
       - name: Pre-execution validation with domain and feedback checks
         run: |
