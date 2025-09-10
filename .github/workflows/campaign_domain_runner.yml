@@ -263,17 +263,8 @@ jobs:
                     # Check if feedback email was injected
                     feedback_status=""
                     if [ "${{ github.event.inputs.skip_feedback_injection }}" != "true" ]; then
-                      if python -c "
-from docx import Document
-import sys
-try:
-    doc = Document('$template')
-    has_feedback = any('$FEEDBACK_EMAIL' in para.text for para in doc.paragraphs)
-    sys.exit(0 if has_feedback else 1)
-except:
-    sys.exit(1)
-" 2>/dev/null; then
-                        feedback_status=" 📧"
+                     if python -c "from docx import Document; import sys; doc = Document('$template'); has_feedback = any('$FEEDBACK_EMAIL' in para.text for para in doc.paragraphs); sys.exit(0 if has_feedback else 1)" 2>/dev/null; then
+                     feedback_status=" 📧"
                       else
                         feedback_status=" ❌"
                       fi
