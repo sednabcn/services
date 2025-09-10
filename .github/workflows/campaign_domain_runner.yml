@@ -415,22 +415,12 @@ jobs:
 
             for template in campaign-templates/*/*.docx; do
               if [ -f "$template" ]; then
-                 TOTAL_TEMPLATES_CHECKED=$((TOTAL_TEMPLATES_CHECKED + 1))
-                 if python - <<'EOF' 2>/dev/null
-from docx import Document
-import sys
-try:
-  doc = Document('$template')
-  has_feedback = any('$FEEDBACK_EMAIL' in para.text for para in doc.paragraphs)
-  sys.exit(0 if has_feedback else 1)
-except:
-    sys.exit(1)
-EOF
-                then
+                TOTAL_TEMPLATES_CHECKED=$((TOTAL_TEMPLATES_CHECKED + 1))
+                if python -c "from docx import Document; import sys; doc = Document('$template'); has_feedback = any('$FEEDBACK_EMAIL' in para.text for para in doc.paragraphs); sys.exit(0 if has_feedback else 1)" 2>/dev/null; then
                   TEMPLATES_WITH_FEEDBACK=$((TEMPLATES_WITH_FEEDBACK + 1))
                 fi
-               fi
-             done
+              fi
+            done
             
             echo "📊 Feedback integration stats:"
             echo "  Templates with feedback: $TEMPLATES_WITH_FEEDBACK/$TOTAL_TEMPLATES_CHECKED"
