@@ -355,18 +355,13 @@ jobs:
           echo "Python version: $(python --version)"
           echo "Directory structure:"
           tree -L 2 2>/dev/null || find . -maxdepth 2 -type d
-          
+
+          python -c "import sys, importlib; modules = ['requests','pandas','docx','csv','json','smtplib','hashlib','uuid']; [importlib.import_module(m) for m in modules]"
+
           python -c "
 import sys, importlib
 modules = ['requests','pandas','docx','csv','json','smtplib','hashlib','uuid']
-for m in modules:
-    try:
-        importlib.import_module(m)
-        print(f'✓ {m}')
-    except ImportError:
-        print(f'✗ {m}')
-"
-
+f
       # 🔥 FINAL PRE-EXECUTION VALIDATION
       - name: Pre-execution validation with domain and feedback checks
         run: |
@@ -385,24 +380,25 @@ for m in modules:
             # Check if templates have feedback email
             TEMPLATES_WITH_FEEDBACK=0
             TOTAL_TEMPLATES_CHECKED=0
-            
+
             for template in campaign-templates/*/*.docx; do
               if [ -f "$template" ]; then
-                TOTAL_TEMPLATES_CHECKED=$((TOTAL_TEMPLATES_CHECKED + 1))
-                if python -c "
-from docx import Document
-import sys
-try:
-    doc = Document('$template')
-    has_feedback = any('$FEEDBACK_EMAIL' in para.text for para in doc.paragraphs)
-    sys.exit(0 if has_feedback else 1)
-except:
-    sys.exit(1)
-" 2>/dev/null; then
+                 TOTAL_TEMPLATES_CHECKED=$((TOTAL_TEMPLATES_CHECKED + 1))
+                 if python - <<'EOF' 2>/dev/null
+            from docx import Document
+            import sys
+            try:
+              doc = Document('$template')
+              has_feedback = any('$FEEDBACK_EMAIL' in para.text for para in doc.paragraphs)
+              sys.exit(0 if has_feedback else 1)
+            except:
+                sys.exit(1)
+            EOF
+                then
                   TEMPLATES_WITH_FEEDBACK=$((TEMPLATES_WITH_FEEDBACK + 1))
                 fi
-              fi
-            done
+               fi
+             done
             
             echo "📊 Feedback integration stats:"
             echo "  Templates with feedback: $TEMPLATES_WITH_FEEDBACK/$TOTAL_TEMPLATES_CHECKED"
