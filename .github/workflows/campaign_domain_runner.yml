@@ -342,9 +342,9 @@ jobs:
           else
             echo "⚠️  Tracking directory not found"
           fi
-       - name: Setup Google credentials (safe + strict check)
-         env:
-          GOOGLE_SVC_JSON: ${{ secrets.GOOGLE_SVC_JSON }}
+      - name: Setup Google credentials (safe + strict check)
+        env:
+         GOOGLE_SVC_JSON: ${{ secrets.GOOGLE_SVC_JSON }}
          if: ${{ env.GOOGLE_SVC_JSON != '' }}
          run: |
            set -euo pipefail
