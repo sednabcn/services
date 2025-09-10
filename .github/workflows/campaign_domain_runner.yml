@@ -1013,7 +1013,34 @@ jobs:
             echo "⚠️ Email feedback injection setup completed with warnings"
           fi
 
-      - name: Run domain-aware campaign processor with feedback
+      - name: Copy existing campaign scripts to workflow
+        run: |
+          echo "📋 Copying existing campaign scripts..."
+          
+          # Ensure utils directory exists
+          mkdir -p utils
+          
+          # Copy your existing scripts if they exist in the repo
+          if [ -f "docx_parser.py" ]; then
+            cp docx_parser.py utils/
+            echo "✅ Copied docx_parser.py to utils/"
+          else
+            echo "⚠️ docx_parser.py not found in repository root"
+          fi
+          
+          if [ -f "generate_summary.py" ]; then
+            cp generate_summary.py utils/
+            chmod +x utils/generate_summary.py
+            echo "✅ Copied generate_summary.py to utils/"
+          else
+            echo "⚠️ generate_summary.py not found in repository root"
+          fi
+          
+          # List what's in utils now
+          echo "📁 Contents of utils directory:"
+          ls -la utils/
+
+      - name: Run integrated domain-aware campaign processor with feedback
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -1021,25 +1048,16 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🚀 Starting domain-aware campaign processor..."
+          echo "🚀 Starting integrated domain-aware campaign processor..."
           echo "Environment: $ENVIRONMENT"
           echo "Mode: $MODE"
           echo "Feedback Email: $FEEDBACK_EMAIL"
           echo "Alert Email: $ALERT_EMAIL"
           
-          # Build arguments
+          # Build base arguments from your original setup
           ARGS="--templates campaign-templates --contacts contacts --scheduled scheduled-campaigns --tracking tracking --alerts $ALERT_EMAIL --feedback $FEEDBACK_EMAIL"
           
-          if [ "$DRY_RUN" == "true" ]; then
-            ARGS="$ARGS --dry-run"
-            echo "🔄 Running in DRY-RUN mode"
-          fi
-          
-          if [ "${{ github.event.inputs.force_remote_mode }}" == "true" ]; then
-            ARGS="$ARGS --remote-only"
-            echo "🌐 Remote-only mode enabled"
-          fi
-          
+          # Add your original domain-aware features
           if [ -n "${{ github.event.inputs.target_domain }}" ]; then
             ARGS="$ARGS --domain ${{ github.event.inputs.target_domain }}"
             echo "🎯 Target domain: ${{ github.event.inputs.target_domain }}"
@@ -1055,6 +1073,17 @@ jobs:
             echo "📧 Feedback injection disabled"
           fi
           
+          # Add enhanced workflow features
+          if [ "$DRY_RUN" == "true" ]; then
+            ARGS="$ARGS --dry-run"
+            echo "🔄 Running in DRY-RUN mode"
+          fi
+          
+          if [ "${{ github.event.inputs.force_remote_mode }}" == "true" ]; then
+            ARGS="$ARGS --remote-only"
+            echo "🌐 Remote-only mode enabled"
+          fi
+          
           if [ "$DEBUG_MODE" == "true" ]; then
             ARGS="$ARGS --debug"
             echo "🐛 Debug mode enabled"
@@ -1062,10 +1091,234 @@ jobs:
           
           echo "Command: python utils/docx_parser.py $ARGS"
           
-          # Execute campaign processor
+          # Execute campaign processor with enhanced logging
           python utils/docx_parser.py $ARGS 2>&1 | tee campaign_execution.log
           
           echo "✅ Campaign processor execution completed"
+
+      - name: Generate summary report using your script
+        if: ${{ github.event.inputs.use_summary_script == 'true' }}
+        run: |
+          echo "📊 Generating summary report using generate_summary.py..."
+          
+          # Determine log file based on mode
+          if [ "$DRY_RUN" == "true" ]; then
+            LOG_FILE="dryrun.log"
+          else
+            LOG_FILE="campaign.log"
+          fi
+          
+          # Check if log file exists, fallback to campaign_execution.log
+          if [ ! -f "$LOG_FILE" ]; then
+            LOG_FILE="campaign_execution.log"
+            echo "Using fallback log file: $LOG_FILE"
+          fi
+          
+          # Create reports directory
+          mkdir -p reports
+          
+          # Set output file for GitHub Step Summary
+          SUMMARY_OUTPUT="${GITHUB_STEP_SUMMARY:-reports/github_step_summary.md}"
+          
+          # Run your summary generator
+          python utils/generate_summary.py \
+            --log-file "$LOG_FILE" \
+            --mode "${{ env.DRY_RUN == 'true' && 'dry-run' || 'live' }}" \
+            --output-summary "$SUMMARY_OUTPUT"
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Summary report generated successfully"
+            echo "SUMMARY_GENERATED=true" >> $GITHUB_ENV
+            
+            # Also create a timestamped copy in reports
+            TIMESTAMPED_SUMMARY="reports/campaign_summary_$(date +%Y%m%d_%H%M%S).md"
+            cp "$SUMMARY_OUTPUT" "$TIMESTAMPED_SUMMARY"
+            echo "📋 Timestamped summary saved: $TIMESTAMPED_SUMMARY"
+          else
+            echo "⚠️ Summary generation completed with issues"
+          fi
+
+      - name: Display generated summary in workflow log
+        if: ${{ github.event.inputs.use_summary_script == 'true' && env.SUMMARY_GENERATED == 'true' }}
+        run: |
+          echo "📋 Generated Campaign Summary"
+          echo "============================="
+          
+          # Display the GitHub Step Summary content
+          if [ -n "$GITHUB_STEP_SUMMARY" ] && [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            echo "Displaying content from GitHub Step Summary:"
+            cat "$GITHUB_STEP_SUMMARY"
+          elif [ -f "reports/github_step_summary.md" ]; then
+            echo "Displaying summary from reports directory:"
+            cat "reports/github_step_summary.md"
+          else
+            echo "⚠️ No summary file found to display"
+          fi
+
+      - name: Enhanced post-execution validation with domain awareness
+        run: |
+          echo "📊 Enhanced post-execution validation with domain awareness..."
+          
+          # Check for your script's success markers
+          SCRIPT_SUCCESS=false
+          if grep -q "Script completed successfully" campaign_execution.log 2>/dev/null; then
+            echo "✅ Main script completed successfully"
+            SCRIPT_SUCCESS=true
+          elif grep -q "Script started successfully" campaign_execution.log 2>/dev/null; then
+            echo "⚠️ Script started but may not have completed normally"
+          else
+            echo "❌ Script completion status unclear"
+          fi
+          
+          # Check for domain-specific processing
+          DOMAIN_PROCESSED=false
+          if [ -n "${{ github.event.inputs.target_domain }}" ]; then
+            if grep -q "Processing domain: ${{ github.event.inputs.target_domain }}" campaign_execution.log 2>/dev/null; then
+              echo "✅ Target domain '${{ github.event.inputs.target_domain }}' was processed"
+              DOMAIN_PROCESSED=true
+            else
+              echo "⚠️ Target domain processing status unclear"
+            fi
+          else
+            DOMAIN_PROCESSED=true  # No specific domain target, so consider it successful
+          fi
+          
+          # Check for campaign processing
+          CAMPAIGNS_PROCESSED=false
+          if grep -q "campaigns processed:" campaign_execution.log 2>/dev/null; then
+            CAMPAIGNS_COUNT=$(grep "campaigns processed:" campaign_execution.log | tail -1 | grep -o '[0-9]\+' | head -1)
+            echo "✅ Processed $CAMPAIGNS_COUNT campaigns"
+            CAMPAIGNS_PROCESSED=true
+          elif grep -q "Campaign.*completed:" campaign_execution.log 2>/dev/null; then
+            echo "✅ At least one campaign was processed"
+            CAMPAIGNS_PROCESSED=true
+          fi
+          
+          # Check for contact loading
+          CONTACTS_LOADED=false
+          if grep -q "Total contacts loaded:" campaign_execution.log 2>/dev/null; then
+            CONTACTS_COUNT=$(grep "Total contacts loaded:" campaign_execution.log | tail -1 | grep -o '[0-9]\+' | head -1)
+            echo "✅ Loaded $CONTACTS_COUNT contacts"
+            CONTACTS_LOADED=true
+          fi
+          
+          # Check for feedback integration (from your original features)
+          FEEDBACK_INTEGRATED=false
+          if [ "${{ github.event.inputs.skip_feedback_injection }}" != "true" ]; then
+            if grep -q "Feedback email.*integrated" campaign_execution.log 2>/dev/null; then
+              echo "✅ Feedback email integration successful"
+              FEEDBACK_INTEGRATED=true
+            elif grep -q "feedback.*$FEEDBACK_EMAIL" campaign_execution.log 2>/dev/null; then
+              echo "✅ Feedback processing detected"
+              FEEDBACK_INTEGRATED=true
+            else
+              echo "⚠️ Feedback integration status unclear"
+            fi
+          else
+            FEEDBACK_INTEGRATED=true  # Skipped by design
+            echo "ℹ️ Feedback injection was disabled"
+          fi
+          
+          # Check for errors
+          ERROR_COUNT=0
+          if grep -q "ERROR:" campaign_execution.log 2>/dev/null; then
+            ERROR_COUNT=$(grep -c "ERROR:" campaign_execution.log)
+            echo "⚠️ Found $ERROR_COUNT errors in log"
+          fi
+          
+          # Summary
+          echo ""
+          echo "=== Enhanced Validation Summary ==="
+          echo "Script Success: $SCRIPT_SUCCESS"
+          echo "Domain Processed: $DOMAIN_PROCESSED"
+          echo "Campaigns Processed: $CAMPAIGNS_PROCESSED"
+          echo "Contacts Loaded: $CONTACTS_LOADED"
+          echo "Feedback Integrated: $FEEDBACK_INTEGRATED"
+          echo "Error Count: $ERROR_COUNT"
+          echo "Summary Generated: ${{ env.SUMMARY_GENERATED }}"
+          
+          # Set final status with domain awareness
+          if [ "$SCRIPT_SUCCESS" = true ] && [ "$DOMAIN_PROCESSED" = true ] && [ "$CAMPAIGNS_PROCESSED" = true ] && [ "$CONTACTS_LOADED" = true ] && [ "$FEEDBACK_INTEGRATED" = true ] && [ "$ERROR_COUNT" -eq 0 ]; then
+            echo "FINAL_STATUS=SUCCESS" >> $GITHUB_ENV
+            echo "🎉 Domain-aware campaign execution fully successful"
+          elif [ "$SCRIPT_SUCCESS" = true ] && [ "$CAMPAIGNS_PROCESSED" = true ] && [ "$DOMAIN_PROCESSED" = true ]; then
+            echo "FINAL_STATUS=SUCCESS_WITH_WARNINGS" >> $GITHUB_ENV
+            echo "⚠️ Domain-aware campaign execution successful with minor issues"
+          else
+            echo "FINAL_STATUS=ISSUES_DETECTED" >> $GITHUB_ENV
+            echo "❌ Domain-aware campaign execution had significant issues"
+          fi
+
+      - name: Upload comprehensive campaign artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: domain-aware-campaign-results-${{ github.run_id }}
+          path: |
+            campaign_execution.log
+            campaign.log
+            dryrun.log
+            error.log
+            tracking/
+            reports/
+            utils/
+          retention-days: 30
+
+      - name: Final status notification with domain details
+        if: always()
+        run: |
+          echo "🏁 Final Domain-Aware Campaign Execution Status: ${FINAL_STATUS:-UNKNOWN}"
+          
+          # Display domain-specific details
+          if [ -n "${{ github.event.inputs.target_domain }}" ]; then
+            echo "🎯 Target Domain: ${{ github.event.inputs.target_domain }}"
+          fi
+          
+          if [ -n "${{ github.event.inputs.campaign_filter }}" ]; then
+            echo "🔍 Campaign Filter: ${{ github.event.inputs.campaign_filter }}"
+          fi
+          
+          echo "📧 Feedback Email: $FEEDBACK_EMAIL"
+          echo "🚨 Alert Email: $ALERT_EMAIL"
+          
+          case "${FINAL_STATUS:-UNKNOWN}" in
+            "SUCCESS")
+              echo "✅ All domain-aware campaign operations completed successfully"
+              echo "📊 Summary available in GitHub Step Summary and artifacts"
+              ;;
+            "SUCCESS_WITH_WARNINGS")
+              echo "⚠️ Domain-aware campaign operations completed with minor warnings"
+              echo "📋 Review logs for warning details"
+              ;;
+            "ISSUES_DETECTED")
+              echo "❌ Significant issues detected during domain-aware execution"
+              echo "🔍 Manual review of logs recommended"
+              ;;
+            *)
+              echo "❓ Unable to determine final status"
+              echo "📝 Check campaign_execution.log for details"
+              ;;
+          esac
+          
+          echo ""
+          echo "📁 Available artifacts:"
+          echo "- Domain-aware campaign execution logs"
+          echo "- Tracking data with domain filtering"
+          echo "- Generated reports"
+          echo "- Feedback integration logs"
+          if [ "${{ env.SUMMARY_GENERATED }}" = "true" ]; then
+            echo "- Campaign summary (in GitHub Step Summary)"
+          fi
+          
+          echo ""
+          echo "🔗 Workflow Details:"
+          echo "- Run ID: ${{ github.run_id }}"
+          echo "- Repository: ${{ github.repository }}"
+          echo "- Branch: ${{ github.ref_name }}"
+          echo "- Environment: $ENVIRONMENT"
+          echo "- Mode: $MODE"
+          echo "- Feedback Integration: ${{ github.event.inputs.skip_feedback_injection != 'true' && 'Enabled' || 'Disabled' }}"
+      
 
       - name: Post-execution validation and reporting
         run: |
