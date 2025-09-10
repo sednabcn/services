@@ -1,0 +1,616 @@
+name: Email Campaign System (Domain-Based Auto-Select with Feedback)
+
+on:
+  push:
+    branches: ["dev", "main", "master"]
+  workflow_dispatch:
+    inputs:
+      use_summary_script:
+        description: 'Use Python summary script'
+        required: false
+        default: 'true'
+      campaign_filter:
+        description: 'Optional campaign filter (domain/sector)'
+        required: false
+        default: ''
+      force_remote_mode:
+        description: 'Force remote-only mode'
+        required: false
+        default: 'false'
+      target_domain:
+        description: 'Target domain (education/finance/healthcare/industry)'
+        required: false
+        default: ''
+      skip_feedback_injection:
+        description: 'Skip feedback email injection'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  campaign-runner:
+    runs-on: ubuntu-latest
+    env:
+      ALERT_EMAIL: alerts@modelphysmat.com
+      FEEDBACK_EMAIL: feedback@modelphysmat.com
+      GITHUB_ACTIONS: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set environment & mode
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == "main" || "${GITHUB_REF_NAME}" == "master" ]]; then
+            echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+            echo "MODE=LIVE" >> $GITHUB_ENV
+            echo "DRY_RUN=false" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+            echo "MODE=DRY-RUN" >> $GITHUB_ENV
+            echo "DRY_RUN=true" >> $GITHUB_ENV
+          fi
+          echo "Environment: $ENVIRONMENT, Mode: $MODE"
+          echo "Feedback Email: $FEEDBACK_EMAIL"
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests pandas python-docx
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt || echo "Some requirements failed, continuing..."
+          fi
+
+      - name: Setup directories
+        run: |
+          mkdir -p campaign-templates/{education,finance,healthcare,industry,technology,government}
+          mkdir -p scheduled-campaigns contacts tracking utils
+          
+          # Ensure template structure exists
+          echo "📁 Template directory structure:"
+          tree campaign-templates/ 2>/dev/null || find campaign-templates -type d
+
+      # 🔥 CRITICAL DOMAIN-BASED VALIDATION STEP
+      - name: Validate domain-based campaign structure (MANDATORY)
+        id: validate-domains
+        run: |
+          echo "=== MANDATORY DOMAIN-BASED VALIDATION ==="
+          python utils/campaign_validator.py --templates campaign-templates --contacts contacts --tracking tracking --setup-tracking
+          
+          # Capture validation results
+          python utils/campaign_validator.py --templates campaign-templates --contacts contacts --tracking tracking --json-output > domain_validation_report.json
+          
+          # Count resources per domain
+          TOTAL_TEMPLATES=0
+          DOMAIN_COUNT=0
+          
+          echo "📊 Domain Analysis:"
+          for domain_dir in campaign-templates/*/; do
+            if [ -d "$domain_dir" ]; then
+              domain=$(basename "$domain_dir")
+              template_count=$(find "$domain_dir" -name "*.docx" 2>/dev/null | wc -l)
+              
+              if [ "$template_count" -gt 0 ]; then
+                echo "  $domain: $template_count template(s)"
+                TOTAL_TEMPLATES=$((TOTAL_TEMPLATES + template_count))
+                DOMAIN_COUNT=$((DOMAIN_COUNT + 1))
+              else
+                echo "  $domain: ⚠️  No templates"
+              fi
+            fi
+          done
+          
+          CONTACT_COUNT=$(find contacts -name "*.csv" -o -name "*.xlsx" -o -name "*.url" 2>/dev/null | wc -l)
+          
+          echo "TOTAL_TEMPLATES=$TOTAL_TEMPLATES" >> $GITHUB_OUTPUT
+          echo "DOMAIN_COUNT=$DOMAIN_COUNT" >> $GITHUB_OUTPUT
+          echo "CONTACT_COUNT=$CONTACT_COUNT" >> $GITHUB_OUTPUT
+          
+          # Fail fast if no templates in any domain
+          if [ "$TOTAL_TEMPLATES" -eq 0 ]; then
+            echo "::error::No template files found in any domain directory"
+            echo "VALIDATION_FAILED=true" >> $GITHUB_ENV
+            exit 1
+          fi
+          
+          # Fail fast if no contacts
+          if [ "$CONTACT_COUNT" -eq 0 ]; then
+            echo "::error::No contact files found"
+            echo "VALIDATION_FAILED=true" >> $GITHUB_ENV
+            exit 1
+          fi
+          
+          echo "✅ Domain-based validation passed"
+
+      # 🔥 INJECT FEEDBACK EMAIL INTO DOCX TEMPLATES
+      - name: Process DOCX templates with feedback email
+        if: ${{ github.event.inputs.skip_feedback_injection != 'true' }}
+        run: |
+          echo "=== PROCESSING DOCX TEMPLATES WITH FEEDBACK EMAIL ==="
+          
+          # Process all domain templates to inject feedback email
+          python utils/docx_feedback_processor.py \
+            --templates-dir campaign-templates \
+            --feedback-email $FEEDBACK_EMAIL \
+            --style footer \
+            --create-backups \
+            --create-report
+          
+          echo "📧 Feedback email injection completed"
+          
+          # Show processing report
+          if [ -f "docx_feedback_processing_report.md" ]; then
+            echo "📋 Processing Report:"
+            cat docx_feedback_processing_report.md
+          fi
+
+      # 🔥 INJECT FEEDBACK EMAIL INTO CAMPAIGNS
+      - name: Inject feedback email into campaigns
+        if: ${{ github.event.inputs.skip_feedback_injection != 'true' }}
+        run: |
+          echo "=== INJECTING FEEDBACK EMAIL INTO CAMPAIGNS ==="
+          
+          # Setup feedback tracking
+          python utils/email_feedback_injector.py \
+            --campaigns-dir scheduled-campaigns \
+            --feedback-email $FEEDBACK_EMAIL \
+            --tracking-dir tracking \
+            --enable-tracking \
+            --create-config
+          
+          echo "📧 Campaign feedback injection completed"
+          
+          # Show updated configs
+          echo "📋 Updated Campaign Configs:"
+          for config in scheduled-campaigns/*.json; do
+            if [ -f "$config" ]; then
+              echo "--- $(basename $config) ---"
+              cat "$config" | jq '.feedback // "No feedback config"' 2>/dev/null || echo "Config processing failed"
+            fi
+          done
+
+      # 🔥 VALIDATE SPECIFIC DOMAIN IF REQUESTED
+      - name: Validate target domain
+        if: ${{ github.event.inputs.target_domain != '' }}
+        run: |
+          TARGET_DOMAIN="${{ github.event.inputs.target_domain }}"
+          echo "=== VALIDATING TARGET DOMAIN: $TARGET_DOMAIN ==="
+          
+          if [ ! -d "campaign-templates/$TARGET_DOMAIN" ]; then
+            echo "::error::Target domain directory not found: $TARGET_DOMAIN"
+            echo "Available domains:"
+            ls campaign-templates/
+            exit 1
+          fi
+          
+          DOMAIN_TEMPLATES=$(find "campaign-templates/$TARGET_DOMAIN" -name "*.docx" 2>/dev/null | wc -l)
+          if [ "$DOMAIN_TEMPLATES" -eq 0 ]; then
+            echo "::error::No templates found in target domain: $TARGET_DOMAIN"
+            exit 1
+          fi
+          
+          echo "✅ Target domain '$TARGET_DOMAIN' has $DOMAIN_TEMPLATES template(s)"
+          echo "TARGET_DOMAIN_TEMPLATES=$DOMAIN_TEMPLATES" >> $GITHUB_ENV
+
+      # 🔥 VALIDATE AND ENHANCE CAMPAIGN CONFIGS
+      - name: Process campaign configurations with tracking IDs
+        run: |
+          echo "=== PROCESSING CAMPAIGN CONFIGS WITH TRACKING IDs ==="
+          
+          # Find all campaign config files
+          CONFIG_FILES=$(find scheduled-campaigns -name "*.json" 2>/dev/null || echo "")
+          
+          if [ -z "$CONFIG_FILES" ]; then
+            echo "⚠️  No campaign config files found in scheduled-campaigns/"
+          else
+            for config in $CONFIG_FILES; do
+              echo "Processing: $config"
+              
+              # Validate and add tracking ID
+              python utils/campaign_validator.py \
+                --templates campaign-templates \
+                --contacts contacts \
+                --tracking tracking \
+                --config "$config"
+              
+              # Show the updated config with tracking ID
+              echo "Updated config:"
+              cat "$config" | jq '.' 2>/dev/null || cat "$config"
+              echo "---"
+            done
+          fi
+
+      - name: Generate domain resource inventory with feedback status
+        run: |
+          echo "=== DOMAIN RESOURCE INVENTORY WITH FEEDBACK STATUS ==="
+          echo "## Domain-Based Resource Inventory" > domain_inventory.md
+          echo "" >> domain_inventory.md
+          echo "**Total Domains:** ${{ steps.validate-domains.outputs.DOMAIN_COUNT }}" >> domain_inventory.md
+          echo "**Total Templates:** ${{ steps.validate-domains.outputs.TOTAL_TEMPLATES }}" >> domain_inventory.md
+          echo "**Contact Files:** ${{ steps.validate-domains.outputs.CONTACT_COUNT }}" >> domain_inventory.md
+          echo "**Feedback Email:** \`$FEEDBACK_EMAIL\`" >> domain_inventory.md
+          echo "" >> domain_inventory.md
+          
+          # Domain breakdown with feedback status
+          for domain_dir in campaign-templates/*/; do
+            if [ -d "$domain_dir" ]; then
+              domain=$(basename "$domain_dir")
+              echo "### 📁 $domain/" >> domain_inventory.md
+              
+              template_files=$(find "$domain_dir" -name "*.docx" 2>/dev/null || echo "")
+              if [ -n "$template_files" ]; then
+                while IFS= read -r template; do
+                  if [ -f "$template" ]; then
+                    filename=$(basename "$template")
+                    size=$(du -h "$template" 2>/dev/null | cut -f1 || echo "?")
+                    
+                    # Check if feedback email was injected
+                    feedback_status=""
+                    if [ "${{ github.event.inputs.skip_feedback_injection }}" != "true" ]; then
+                      if python -c "
+from docx import Document
+import sys
+try:
+    doc = Document('$template')
+    has_feedback = any('$FEEDBACK_EMAIL' in para.text for para in doc.paragraphs)
+    sys.exit(0 if has_feedback else 1)
+except:
+                        sys.exit(1)
+" 2>/dev/null; then
+                        feedback_status=" 📧"
+                      else
+                        feedback_status=" ❌"
+                      fi
+                    fi
+                    
+                    echo "- \`$filename\` ($size)$feedback_status" >> domain_inventory.md
+                  fi
+                done <<< "$template_files"
+              else
+                echo "- ⚠️  No templates found" >> domain_inventory.md
+              fi
+              echo "" >> domain_inventory.md
+            fi
+          done
+          
+          # Contact files
+          echo "### 📋 Contact Files" >> domain_inventory.md
+          contact_files=$(find contacts -name "*.csv" -o -name "*.xlsx" -o -name "*.url" 2>/dev/null || echo "")
+          if [ -n "$contact_files" ]; then
+            while IFS= read -r contact; do
+              if [ -f "$contact" ]; then
+                filename=$(basename "$contact")
+                size=$(du -h "$contact" 2>/dev/null | cut -f1 || echo "?")
+                echo "- \`$filename\` ($size)" >> domain_inventory.md
+              fi
+            done <<< "$contact_files"
+          else
+            echo "- ⚠️  No contact files found" >> domain_inventory.md
+          fi
+          
+          # Feedback injection summary
+          echo "" >> domain_inventory.md
+          echo "### 📧 Feedback Integration Status" >> domain_inventory.md
+          if [ "${{ github.event.inputs.skip_feedback_injection }}" == "true" ]; then
+            echo "- **Status:** Skipped (manual override)" >> domain_inventory.md
+          else
+            echo "- **Status:** Enabled" >> domain_inventory.md
+            echo "- **Feedback Email:** \`$FEEDBACK_EMAIL\`" >> domain_inventory.md
+            if [ -f "docx_feedback_processing_report.md" ]; then
+              echo "- **Templates Processed:** See processing report" >> domain_inventory.md
+            fi
+            if [ -f "tracking/feedback_config.json" ]; then
+              echo "- **Tracking Config:** Created" >> domain_inventory.md
+            fi
+          fi
+          
+          echo "📋 Domain inventory with feedback status created"
+
+      # 🔥 TRACKING STRUCTURE VALIDATION
+      - name: Validate tracking structure and uniqueness
+        run: |
+          echo "=== TRACKING STRUCTURE VALIDATION ==="
+          
+          # Check tracking directory structure
+          if [ -d "tracking" ]; then
+            echo "📊 Tracking structure:"
+            tree tracking/ 2>/dev/null || find tracking -type d
+            
+            # Check for tracking manifest
+            if [ -f "tracking/tracking_manifest.json" ]; then
+              echo "✅ Tracking manifest exists"
+              EXISTING_IDS=$(cat tracking/tracking_manifest.json | jq -r '.existing_ids | length' 2>/dev/null || echo "0")
+              echo "📈 Existing tracking IDs: $EXISTING_IDS"
+            else
+              echo "⚠️  No tracking manifest found"
+            fi
+            
+            # Check for feedback config
+            if [ -f "tracking/feedback_config.json" ]; then
+              echo "✅ Feedback tracking config exists"
+              cat tracking/feedback_config.json | jq '.' 2>/dev/null || echo "Config format issue"
+            else
+              echo "⚠️  No feedback tracking config found"
+            fi
+          else
+            echo "⚠️  Tracking directory not found"
+          fi
+
+      - name: Setup Google credentials
+        if: ${{ secrets.GOOGLE_SVC_JSON != '' }}
+        run: |
+          echo "${{ secrets.GOOGLE_SVC_JSON }}" | base64 -d > /tmp/google_svc.json
+          chmod 600 /tmp/google_svc.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/google_svc.json" >> $GITHUB_ENV
+
+      - name: Validate environment
+        run: |
+          echo "Python version: $(python --version)"
+          echo "Directory structure:"
+          tree -L 2 2>/dev/null || find . -maxdepth 2 -type d
+          
+          python -c "
+import sys, importlib
+modules = ['requests','pandas','docx','csv','json','smtplib','hashlib','uuid']
+for m in modules:
+    try:
+        importlib.import_module(m)
+        print(f'✓ {m}')
+    except ImportError:
+        print(f'✗ {m}')
+"
+
+      # 🔥 FINAL PRE-EXECUTION VALIDATION
+      - name: Pre-execution validation with domain and feedback checks
+        run: |
+          echo "=== FINAL PRE-EXECUTION DOMAIN & FEEDBACK CHECK ==="
+          
+          # Re-validate domain structure
+          python utils/campaign_validator.py \
+            --templates campaign-templates \
+            --contacts contacts \
+            --tracking tracking
+          
+          # Validate feedback integration if enabled
+          if [ "${{ github.event.inputs.skip_feedback_injection }}" != "true" ]; then
+            echo "🔍 Validating feedback integration:"
+            
+            # Check if templates have feedback email
+            TEMPLATES_WITH_FEEDBACK=0
+            TOTAL_TEMPLATES_CHECKED=0
+            
+            for template in campaign-templates/*/*.docx; do
+              if [ -f "$template" ]; then
+                TOTAL_TEMPLATES_CHECKED=$((TOTAL_TEMPLATES_CHECKED + 1))
+                if python -c "
+from docx import Document
+import sys
+try:
+    doc = Document('$template')
+    has_feedback = any('$FEEDBACK_EMAIL' in para.text for para in doc.paragraphs)
+    sys.exit(0 if has_feedback else 1)
+except:
+    sys.exit(1)
+" 2>/dev/null; then
+                  TEMPLATES_WITH_FEEDBACK=$((TEMPLATES_WITH_FEEDBACK + 1))
+                fi
+              fi
+            done
+            
+            echo "📊 Feedback integration stats:"
+            echo "  Templates with feedback: $TEMPLATES_WITH_FEEDBACK/$TOTAL_TEMPLATES_CHECKED"
+            
+            if [ "$TEMPLATES_WITH_FEEDBACK" -gt 0 ]; then
+              echo "✅ Feedback email integration verified"
+            else
+              echo "⚠️  No templates found with feedback email"
+            fi
+          fi
+          
+          # Domain-specific validation if filter specified
+          if [ -n "${{ github.event.inputs.campaign_filter }}" ]; then
+            FILTER="${{ github.event.inputs.campaign_filter }}"
+            echo "Applying campaign filter: $FILTER"
+            
+            # Check if filter matches a domain
+            if [ -d "campaign-templates/$FILTER" ]; then
+              echo "✅ Filter matches domain: $FILTER"
+              echo "FILTER_DOMAIN=$FILTER" >> $GITHUB_ENV
+            else
+              echo "⚠️  Filter '$FILTER' doesn't match any domain directory"
+            fi
+          fi
+          
+          echo "✅ Pre-execution validation passed"
+
+      - name: Run domain-aware campaign processor with feedback
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARGS="--templates campaign-templates --contacts contacts --scheduled scheduled-campaigns --tracking tracking --alerts $ALERT_EMAIL --feedback $FEEDBACK_EMAIL"
+          
+          # Add domain-specific arguments
+          if [ "$DRY_RUN" == "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          if [ "${{ github.event.inputs.force_remote_mode }}" == "true" ]; then
+            ARGS="$ARGS --remote-only"
+          fi
+          if [ -n "${{ github.event.inputs.target_domain }}" ]; then
+            ARGS="$ARGS --domain ${{ github.event.inputs.target_domain }}"
+          fi
+          if [ -n "${{ env.FILTER_DOMAIN }}" ]; then
+            ARGS="$ARGS --filter-domain ${FILTER_DOMAIN}"
+          fi
+          if [ "${{ github.event.inputs.skip_feedback_injection }}" == "true" ]; then
+            ARGS="$ARGS --no-feedback"
+          fi
+          
+          echo "Running domain-aware campaign processor with feedback:"
+          echo "python utils/docx_parser.py $ARGS"
+          python utils/docx_parser.py $ARGS | tee campaign_execution.log
+
+      - name: Generate comprehensive execution summary with feedback
+        if: always()
+        run: |
+          echo "=== COMPREHENSIVE EXECUTION SUMMARY WITH FEEDBACK ==="
+          
+          # Include domain inventory with feedback status
+          cat domain_inventory.md >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Add tracking information
+          echo "## 🔍 Tracking Information" >> $GITHUB_STEP_SUMMARY
+          if [ -f "tracking/tracking_manifest.json" ]; then
+            TOTAL_IDS=$(cat tracking/tracking_manifest.json | jq -r '.existing_ids | length' 2>/dev/null || echo "0")
+            echo "- **Total Tracking IDs:** $TOTAL_IDS" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tracking Structure:** Domain-separated" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f "tracking/feedback_config.json" ]; then
+            echo "- **Feedback Tracking:** Enabled" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Add feedback integration summary
+          echo "## 📧 Feedback Integration Summary" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.skip_feedback_injection }}" == "true" ]; then
+            echo "- **Status:** Skipped (manual override)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status:** Active" >> $GITHUB_STEP_SUMMARY
+            echo "- **Feedback Email:** \`$FEEDBACK_EMAIL\`" >> $GITHUB_STEP_SUMMARY
+            
+            if [ -f "docx_feedback_processing_report.md" ]; then
+              echo "- **Template Processing:** Completed" >> $GITHUB_STEP_SUMMARY
+              echo "- **Processing Report:** Available in artifacts" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            if [ -f "feedback_injection_report.md" ]; then
+              echo "- **Campaign Injection:** Completed" >> $GITHUB_STEP_SUMMARY
+              echo "- **Injection Report:** Available in artifacts" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.use_summary_script }}" == "true" ]; then
+            python utils/generate_summary.py --log campaign_execution.log --output $GITHUB_STEP_SUMMARY
+          else
+            echo "## 📊 Execution Summary" >> $GITHUB_STEP_SUMMARY
+            echo "- **Domains available:** ${{ steps.validate-domains.outputs.DOMAIN_COUNT }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Templates processed:** ${{ steps.validate-domains.outputs.TOTAL_TEMPLATES }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Contact files used:** ${{ steps.validate-domains.outputs.CONTACT_COUNT }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Execution mode:** ${{ env.MODE }}" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${{ github.event.inputs.target_domain }}" ]; then
+              echo "- **Target domain:** ${{ github.event.inputs.target_domain }}" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+      - name: Upload comprehensive artifacts with feedback reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: domain-campaign-artifacts-with-feedback-${{ github.run_id }}
+          path: |
+            campaign_execution.log
+            domain_validation_report.json
+            domain_inventory.md
+            docx_feedback_processing_report.md
+            feedback_injection_report.md
+            tracking/
+            *.log
+          retention-days: 30
+
+      - name: Check critical failures with domain and feedback context
+        if: always()
+        run: |
+          if [ "$VALIDATION_FAILED" == "true" ]; then
+            echo "::error::Domain validation failed - campaign not executed"
+            exit 1
+          fi
+          
+          if ! grep -q "Script completed successfully" campaign_execution.log 2>/dev/null; then
+            echo "::warning::Script did not complete successfully"
+            echo "SCRIPT_FAILED=true" >> $GITHUB_ENV
+          fi
+          
+          if grep -q "ERROR:" campaign_execution.log 2>/dev/null; then
+            echo "::error::Critical errors detected"
+            echo "CRITICAL_ERROR=true" >> $GITHUB_ENV
+          fi
+          
+          # Check feedback integration if enabled
+          if [ "${{ github.event.inputs.skip_feedback_injection }}" != "true" ]; then
+            if ! [ -f "tracking/feedback_config.json" ]; then
+              echo "::warning::Feedback tracking config not created"
+              echo "FEEDBACK_WARNING=true" >> $GITHUB_ENV
+            fi
+          fi
+
+      - name: Create domain-aware issue on failure with feedback context
+        if: failure() || (always() && (env.CRITICAL_ERROR == 'true' || env.VALIDATION_FAILED == 'true'))
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const timestamp = new Date().toISOString();
+            const isValidationError = '${{ env.VALIDATION_FAILED }}' === 'true';
+            const targetDomain = '${{ github.event.inputs.target_domain }}';
+            const feedbackSkipped = '${{ github.event.inputs.skip_feedback_injection }}' === 'true';
+            
+            let title, bodyPrefix;
+            if (isValidationError) {
+              title = `🔍 Domain Validation Failed - ${timestamp.split('T')[0]}`;
+              bodyPrefix = 'Campaign domain structure validation failed. ';
+            } else {
+              title = `🚨 Domain Campaign Failed - ${timestamp.split('T')[0]}`;
+              bodyPrefix = 'Domain-based campaign execution failed. ';
+            }
+            
+            if (targetDomain) {
+              title += ` (${targetDomain})`;
+              bodyPrefix += `Target domain: ${targetDomain}. `;
+            }
+            
+            if (!feedbackSkipped) {
+              bodyPrefix += 'Feedback email integration was enabled. ';
+            }
+            
+            const labels = ['automation', 'campaign-issue', 'domain-based', 
+                           isValidationError ? 'validation-error' : 'execution-error'];
+            
+            if (!feedbackSkipped) {
+              labels.push('feedback-integration');
+            }
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: `${bodyPrefix}Execution logs: ${runUrl}`,
+              labels: labels
+            });
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f /tmp/google_svc.json
+          rm -f domain_validation_report.json

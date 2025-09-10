@@ -1,17 +1,74 @@
 {
-  "name": "Test Campaign",
-  "sector": "education",
+  "name": "Education Outreach Campaign",
+  "sector": "education", 
   "templates": ["outreach.docx"],
   "contacts": "contacts/client_test.url",
   "mode": "schedule_now",
-  "date": "2025-09-09",
-  "from_email": "campaigns@yourdomain.com",
+  "date": "2025-09-10",
+  "from_email": "campaigns@modelphysmat.com",
   "from_name": "Outreach Team",
-  "subject": "Collaboration Opportunity Test",
+  "reply_to": "feedback@modelphysmat.com",
+  "subject": "Partnership Opportunity in Education",
+  "feedback": {
+    "email": "feedback@modelphysmat.com",
+    "injection_type": "footer_signature",
+    "auto_inject": true,
+    "reply_to_feedback": true,
+    "track_responses": true,
+    "forward_to": [
+      "campaigns@modelphysmat.com",
+      "outreach-team@modelphysmat.com"
+    ],
+    "response_categories": [
+      "positive_feedback",
+      "improvement_suggestion", 
+      "complaint",
+      "unsubscribe_request",
+      "partnership_interest",
+      "general_inquiry"
+    ]
+  },
+  "email_headers": {
+    "Reply-To": "feedback@modelphysmat.com",
+    "X-Feedback-Email": "feedback@modelphysmat.com",
+    "X-Campaign-Type": "education-outreach",
+    "X-Domain": "education",
+    "X-Template-Processed": "true"
+  },
+  "signature": {
+    "include_feedback_notice": true,
+    "feedback_message": "We value your feedback! Please share your thoughts at feedback@modelphysmat.com",
+    "style": "professional",
+    "include_unsubscribe": true
+  },
   "defaults": {
     "Status": "Pending",
     "Follow-up": "TBD",
-    "Region": "Global",
-    "Notes": ""
-  }
+    "Region": "Global", 
+    "Notes": "",
+    "Feedback-Enabled": "Yes",
+    "Template-Has-Feedback": "Yes",
+    "Tracking-Enabled": "Yes"
+  },
+  "tracking": {
+    "enabled": true,
+    "domain_separated": true,
+    "analytics": true,
+    "response_tracking": true,
+    "feedback_tracking": true
+  },
+  "validation": {
+    "templates_validated": true,
+    "contacts_validated": true,
+    "feedback_injected": true,
+    "tracking_setup": true,
+    "last_validated": "2025-09-10T12:00:00Z"
+  },
+  "processing_log": {
+    "template_backup_created": true,
+    "feedback_injection_completed": true,
+    "tracking_id_generated": true,
+    "config_enhanced": true
+  },
+  "tracking_id": "EDUCATION_a1b2c3d4_20250910_120000"
 }
