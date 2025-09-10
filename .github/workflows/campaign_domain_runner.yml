@@ -342,13 +342,49 @@ jobs:
           else
             echo "⚠️  Tracking directory not found"
           fi
+       - name: Setup Google credentials (safe + strict check)
+         env:
+          GOOGLE_SVC_JSON: ${{ secrets.GOOGLE_SVC_JSON }}
+         if: ${{ env.GOOGLE_SVC_JSON != '' }}
+         run: |
+           set -euo pipefail
+          
+           SECRET="$GOOGLE_SVC_JSON"
 
-      - name: Setup Google credentials
-        if: ${{ secrets.GOOGLE_SVC_JSON != '' }}
-        run: |
-          echo "${{ secrets.GOOGLE_SVC_JSON }}" | base64 -d > /tmp/google_svc.json
-          chmod 600 /tmp/google_svc.json
-          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/google_svc.json" >> $GITHUB_ENV
+           # Detect raw JSON vs base64
+           if echo "$SECRET" | head -c 1 | grep -q '{'; then
+           echo "✅ Secret looks like raw JSON"
+           echo "$SECRET" > /tmp/google_svc.json
+           else
+           echo "✅ Secret looks like base64, decoding..."
+           echo "$SECRET" | base64 -d > /tmp/google_svc.json
+           fi
+          
+           chmod 600 /tmp/google_svc.json
+
+           
+           # Validate JSON structure
+           if command -v jq >/dev/null 2>&1; then
+           echo "🔎 Validating JSON structure..."
+           jq . /tmp/google_svc.json >/dev/null
+          
+           for key in type project_id client_email client_id; do
+           if ! jq -e --arg k "$key" 'has($k)' /tmp/google_svc.json >/dev/null; then
+           echo "❌ Missing required field: $key"
+           exit 1
+           fi
+           done
+           echo "✅ JSON contains all required fields"
+           else
+           echo "⚠️ jq not installed, skipping validation"
+           fi
+
+           # Debug mode: show safe preview (never private key)
+           echo "🔎 Preview of service account JSON:"
+           grep -E '"(type|project_id|client_email|client_id)"' /tmp/google_svc.json || true
+          
+           echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/google_svc.json" >> $GITHUB_ENV
+
 
       - name: Validate environment
         run: |
