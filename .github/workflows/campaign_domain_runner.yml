@@ -271,7 +271,7 @@ try:
     has_feedback = any('$FEEDBACK_EMAIL' in para.text for para in doc.paragraphs)
     sys.exit(0 if has_feedback else 1)
 except:
-                        sys.exit(1)
+    sys.exit(1)
 " 2>/dev/null; then
                         feedback_status=" 📧"
                       else
