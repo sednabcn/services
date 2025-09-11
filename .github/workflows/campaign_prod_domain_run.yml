@@ -344,35 +344,35 @@ jobs:
         id: domain_analysis
         run: |
           echo "Analyzing campaign templates and domain structure..."
-          
-          python -c """
-          import sys
-          import json
-          import os
-          from pathlib import Path
-          from datetime import datetime
-
-          # Count templates in each domain directory
-          domains = ['education', 'finance', 'healthcare', 'industry', 'technology', 'government']
-          domain_stats = {}
-          total_templates = 0
-
-          templates_dir = Path('campaign-templates')
-          if templates_dir.exists():
-            print('Analyzing campaign templates...')
     
-          # Check domain-based structure
-          for domain in domains:
-            domain_path = templates_dir / domain
-            if domain_path.exists():
-              docx_files = list(domain_path.glob('*.docx'))
-              doc_files = list(domain_path.glob('*.doc')) 
-              json_files = list(domain_path.glob('*.json'))
-              txt_files = list(domain_path.glob('*.txt'))
-              html_files = list(domain_path.glob('*.html'))
+          python -c """
+import sys
+import json
+import os
+from pathlib import Path
+from datetime import datetime
+
+# Count templates in each domain directory
+domains = ['education', 'finance', 'healthcare', 'industry', 'technology', 'government']
+domain_stats = {}
+total_templates = 0
+
+templates_dir = Path('campaign-templates')
+if templates_dir.exists():
+    print('Analyzing campaign templates...')
+
+    # Check domain-based structure
+    for domain in domains:
+        domain_path = templates_dir / domain
+        if domain_path.exists():
+            docx_files = list(domain_path.glob('*.docx'))
+            doc_files = list(domain_path.glob('*.doc')) 
+            json_files = list(domain_path.glob('*.json'))
+            txt_files = list(domain_path.glob('*.txt'))
+            html_files = list(domain_path.glob('*.html'))
             
-              all_templates = docx_files + doc_files + json_files + txt_files + html_files
-            
+            all_templates = docx_files + doc_files + json_files + txt_files + html_files
+
             domain_stats[domain] = {
                 'template_count': len(all_templates),
                 'docx_count': len(docx_files),
@@ -381,16 +381,21 @@ jobs:
                 'templates': [t.name for t in all_templates]
             }
             total_templates += len(all_templates)
-            
             print(f'  - {domain}: {len(all_templates)} templates')
         else:
-            domain_stats[domain] = {'template_count': 0, 'templates': []}
-    
+            domain_stats[domain] = {
+                'template_count': 0,
+                'docx_count': 0,
+                'json_count': 0,
+                'other_count': 0,
+                'templates': []
+            }
+
     # Check root level templates
     root_templates = []
     for ext in ['*.docx', '*.doc', '*.json', '*.txt', '*.html']:
         root_templates.extend(list(templates_dir.glob(ext)))
-    
+
     if root_templates:
         domain_stats['_root'] = {
             'template_count': len(root_templates),
@@ -398,7 +403,7 @@ jobs:
         }
         total_templates += len(root_templates)
         print(f'  - Root level: {len(root_templates)} templates')
-    
+
     print(f'Total templates found: {total_templates}')
 else:
     print('campaign-templates directory not found')
@@ -410,6 +415,7 @@ if scheduled_dir.exists():
     for ext in ['*.json', '*.docx', '*.txt', '*.html']:
         scheduled_campaigns += len(list(scheduled_dir.glob(ext)))
 
+# Create final analysis dict
 domain_analysis = {
     'domain_count': len([d for d in domain_stats.values() if d['template_count'] > 0]),
     'template_count': total_templates,
@@ -417,15 +423,18 @@ domain_analysis = {
     'domains': domain_stats,
     'analysis_method': 'direct_filesystem_scan',
     'analysis_timestamp': datetime.now().isoformat(),
-    'target_domain_filter': '${{ github.event.inputs.target_domain }}' if '${{ github.event.inputs.target_domain }}' else 'all_domains'
+    'target_domain_filter': os.getenv('TARGET_DOMAIN', 'all_domains')
 }
 
+# Write output to file
 with open('domain_analysis.json', 'w') as f:
     json.dump(domain_analysis, f, indent=2)
 
-print(f'::set-output name=campaigns::{total_templates}')
-print(f'Domain analysis completed: {total_templates} templates across {len([d for d in domain_stats.values() if d[\"template_count\"] > 0])} active domains')
-"""
+# Output summary for GitHub Actions
+print(f"::set-output name=campaigns::{total_templates}")
+print(f"Domain analysis completed: {total_templates} templates across {domain_analysis['domain_count']} active domains")
+    """
+
 
       - name: Create sample test data if directories are empty
         run: |

@@ -449,6 +449,9 @@ def main():
     parser.add_argument("--json-output", action="store_true", help="Output JSON report")
     parser.add_argument("--output-file", help="Save report to file")
     parser.add_argument("--strict", action="store_true", help="Fail on any warnings")
+    parser.add_argument('--no-strict', dest='strict', action='store_false', help='Do not fail on warnings or missing data') 
+
+    parser.set_defaults(strict=True)
     
     args = parser.parse_args()
     
