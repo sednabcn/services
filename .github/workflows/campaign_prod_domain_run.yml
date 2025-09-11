@@ -174,16 +174,16 @@ jobs:
           
           if [ -f "email_feedback_injector.py" ]; then
             echo "✅ Found email_feedback_injector.py"
-            python -c "
-import sys
-sys.path.append('.')
-try:
-    from email_feedback_injector import EmailFeedbackInjector
-    injector = EmailFeedbackInjector()
-    print('✅ email_feedback_injector.py works')
-except Exception as e:
-    print(f'⚠️ Feedback injector warning: {e}')
-"
+            python -c """
+            import sys
+            sys.path.append('.')
+            try:
+              from email_feedback_injector import EmailFeedbackInjector
+              injector = EmailFeedbackInjector()
+              print('✅ email_feedback_injector.py works')
+            except Exception as e:
+              print(f'⚠️ Feedback injector warning: {e}') """
+              
             validation_report+="## Feedback System: PASSED\n"
           else
             echo "⚠️ email_feedback_injector.py not found"
@@ -192,16 +192,16 @@ except Exception as e:
           
           if [ -f "docx_feedback_processor.py" ]; then
             echo "✅ Found docx_feedback_processor.py"
-            python -c "
-import sys
-sys.path.append('.')
-try:
-    from docx_feedback_processor import DOCXFeedbackProcessor
-    processor = DOCXFeedbackProcessor()
-    print('✅ docx_feedback_processor.py works')
-except Exception as e:
-    print(f'⚠️ DOCX processor warning: {e}')
-"
+            python -c """
+            import sys
+            sys.path.append('.')
+            try:
+              from docx_feedback_processor import DOCXFeedbackProcessor
+              processor = DOCXFeedbackProcessor()
+              print('✅ docx_feedback_processor.py works')
+            except Exception as e:
+              print(f'⚠️ DOCX processor warning: {e}') """
+
             validation_report+="## DOCX Processor: PASSED\n"
           else
             echo "⚠️ docx_feedback_processor.py not found"
@@ -210,15 +210,15 @@ except Exception as e:
           
           if [ -f "reply_tracker.py" ]; then
             echo "✅ Found reply_tracker.py"
-            python -c "
-import sys
-sys.path.append('.')
-try:
-    from reply_tracker import ReplyTracker
-    print('✅ reply_tracker.py imports successfully')
-except Exception as e:
-    print(f'⚠️ Reply tracker warning: {e}')
-"
+            python -c """
+            import sys
+            sys.path.append('.')
+            try:
+              from reply_tracker import ReplyTracker
+              print('✅ reply_tracker.py imports successfully')
+            except Exception as e:
+              print(f'⚠️ Reply tracker warning: {e}') """
+              
             validation_report+="## Reply Tracker: PASSED\n"
           else
             echo "⚠️ reply_tracker.py not found"
@@ -260,119 +260,118 @@ except Exception as e:
         run: |
           echo "Analyzing contact sources using YOUR email_campaign_system.py..."
           
-          python -c "
-import sys
-import os
-import json
-from datetime import datetime
-sys.path.append('.')
+          python -c """
+          import sys
+          import os
+          import json
+          from datetime import datetime
+          sys.path.append('.')
 
-try:
-    from email_campaign_system import ContactParser
+          try:
+            from email_campaign_system import ContactParser
     
-    print('Using YOUR existing email_campaign_system.py ContactParser')
-    parser = ContactParser()
+            print('Using YOUR existing email_campaign_system.py ContactParser')
+            parser = ContactParser()
     
-    # Load contacts from your contacts directory
-    contacts = parser.parse_contacts_directory('contacts')
-    print(f'Successfully loaded {len(contacts)} contacts using YOUR ContactParser')
-    
-    # Analyze sources
-    sources = {}
-    domains = {}
-    contact_types = {}
-    
-    for contact in contacts:
-        # Source analysis
-        source = contact.get('source', 'unknown')
-        sources[source] = sources.get(source, 0) + 1
-        
-        # Domain analysis
-        email = contact.get('email', '').lower()
-        if '@' in email:
-            domain = email.split('@')[-1]
-            domains[domain] = domains.get(domain, 0) + 1
+            # Load contacts from your contacts directory
+            contacts = parser.parse_contacts_directory('contacts')
+            print(f'Successfully loaded {len(contacts)} contacts using YOUR ContactParser')
             
-        # Contact type analysis
-        if 'extracted_from' in contact:
-            contact_types[contact['extracted_from']] = contact_types.get(contact['extracted_from'], 0) + 1
+            # Analyze sources
+            sources = {}
+            domains = {}
+            contact_types = {}
+            
+            for contact in contacts:
+             # Source analysis
+             source = contact.get('source', 'unknown')
+             sources[source] = sources.get(source, 0) + 1
+        
+             # Domain analysis
+             email = contact.get('email', '').lower()
+             if '@' in email:
+               domain = email.split('@')[-1]
+               domains[domain] = domains.get(domain, 0) + 1
+               
+             # Contact type analysis
+             if 'extracted_from' in contact:
+               contact_types[contact['extracted_from']] = contact_types.get(contact['extracted_from'], 0) + 1
     
-    # Save comprehensive analysis
-    analysis = {
-        'total_contacts': len(contacts),
-        'sources_breakdown': sources,
-        'domain_breakdown': domains,
-        'contact_types': contact_types,
-        'top_domains': sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10],
-        'sample_contacts': contacts[:3] if contacts else [],
-        'loaded_with': 'YOUR_email_campaign_system.py',
-        'analysis_timestamp': datetime.now().isoformat(),
-        'contact_source_filter': '${{ github.event.inputs.contact_source }}' if '${{ github.event.inputs.contact_source }}' else 'all_sources'
-    }
+            # Save comprehensive analysis
+            analysis = {
+            'total_contacts': len(contacts),
+            'sources_breakdown': sources,
+            'domain_breakdown': domains,
+            'contact_types': contact_types,
+            'top_domains': sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10],
+            'sample_contacts': contacts[:3] if contacts else [],
+            'loaded_with': 'YOUR_email_campaign_system.py',
+            'analysis_timestamp': datetime.now().isoformat(),
+            'contact_source_filter': '${{ github.event.inputs.contact_source }}' if '${{ github.event.inputs.contact_source }}' else 'all_sources'
+            }
     
-    with open('contact_analysis.json', 'w') as f:
-        json.dump(analysis, f, indent=2, default=str)
+            with open('contact_analysis.json', 'w') as f:
+              json.dump(analysis, f, indent=2, default=str)
     
-    print(f'Contact analysis complete:')
-    print(f'  - Total contacts: {len(contacts)}')
-    print(f'  - Sources: {len(sources)}')
-    print(f'  - Domains: {len(domains)}')
-    print(f'  - Top domain: {max(domains.items(), key=lambda x: x[1])[0] if domains else \"none\"}')
+            print(f'Contact analysis complete:')
+            print(f'  - Total contacts: {len(contacts)}')
+            print(f'  - Sources: {len(sources)}')
+            print(f'  - Domains: {len(domains)}')
+            print(f'  - Top domain: {max(domains.items(), key=lambda x: x[1])[0] if domains else \"none\"}')
     
-    print(f'::set-output name=count::{len(contacts)}')
+            print(f'::set-output name=count::{len(contacts)}')
     
-    if len(contacts) == 0:
-        print('::warning::No contacts loaded - check your contacts directory and files')
-        # List files in contacts directory for debugging
-        if os.path.exists('contacts'):
-            files = os.listdir('contacts')
-            print(f'Files found in contacts/: {files}')
+            if len(contacts) == 0:
+              print('::warning::No contacts loaded - check your contacts directory and files')
+            # List files in contacts directory for debugging
+            if os.path.exists('contacts'):
+              files = os.listdir('contacts')
+              print(f'Files found in contacts/: {files}')
     
-except ImportError as e:
-    print(f'❌ Import error with YOUR email_campaign_system.py: {e}')
-    print(f'::set-output name=count::0')
-    with open('contact_analysis.json', 'w') as f:
-        json.dump({'error': f'Import failed: {e}', 'total_contacts': 0}, f)
+          except ImportError as e:
+            print(f'❌ Import error with YOUR email_campaign_system.py: {e}')
+            print(f'::set-output name=count::0')
+            with open('contact_analysis.json', 'w') as f:
+              json.dump({'error': f'Import failed: {e}', 'total_contacts': 0}, f)
     
-except Exception as e:
-    print(f'❌ Error with YOUR email_campaign_system.py: {e}')
-    print(f'::set-output name=count::0')
-    with open('contact_analysis.json', 'w') as f:
-        json.dump({'error': str(e), 'total_contacts': 0}, f)
-"
+          except Exception as e:
+            print(f'❌ Error with YOUR email_campaign_system.py: {e}')
+            print(f'::set-output name=count::0')
+            with open('contact_analysis.json', 'w') as f:
+              json.dump({'error': str(e), 'total_contacts': 0}, f) """
 
       - name: Analyze campaign templates and domains
         id: domain_analysis
         run: |
           echo "Analyzing campaign templates and domain structure..."
           
-          python -c "
-import sys
-import json
-import os
-from pathlib import Path
-from datetime import datetime
+          python -c """
+          import sys
+          import json
+          import os
+          from pathlib import Path
+          from datetime import datetime
 
-# Count templates in each domain directory
-domains = ['education', 'finance', 'healthcare', 'industry', 'technology', 'government']
-domain_stats = {}
-total_templates = 0
+          # Count templates in each domain directory
+          domains = ['education', 'finance', 'healthcare', 'industry', 'technology', 'government']
+          domain_stats = {}
+          total_templates = 0
 
-templates_dir = Path('campaign-templates')
-if templates_dir.exists():
-    print('Analyzing campaign templates...')
+          templates_dir = Path('campaign-templates')
+          if templates_dir.exists():
+            print('Analyzing campaign templates...')
     
-    # Check domain-based structure
-    for domain in domains:
-        domain_path = templates_dir / domain
-        if domain_path.exists():
-            docx_files = list(domain_path.glob('*.docx'))
-            doc_files = list(domain_path.glob('*.doc')) 
-            json_files = list(domain_path.glob('*.json'))
-            txt_files = list(domain_path.glob('*.txt'))
-            html_files = list(domain_path.glob('*.html'))
+          # Check domain-based structure
+          for domain in domains:
+            domain_path = templates_dir / domain
+            if domain_path.exists():
+              docx_files = list(domain_path.glob('*.docx'))
+              doc_files = list(domain_path.glob('*.doc')) 
+              json_files = list(domain_path.glob('*.json'))
+              txt_files = list(domain_path.glob('*.txt'))
+              html_files = list(domain_path.glob('*.html'))
             
-            all_templates = docx_files + doc_files + json_files + txt_files + html_files
+              all_templates = docx_files + doc_files + json_files + txt_files + html_files
             
             domain_stats[domain] = {
                 'template_count': len(all_templates),
@@ -426,7 +425,7 @@ with open('domain_analysis.json', 'w') as f:
 
 print(f'::set-output name=campaigns::{total_templates}')
 print(f'Domain analysis completed: {total_templates} templates across {len([d for d in domain_stats.values() if d[\"template_count\"] > 0])} active domains')
-"
+"""
 
       - name: Create sample test data if directories are empty
         run: |
@@ -556,19 +555,18 @@ EOF
           # Validate email configuration using YOUR email_sender.py
           echo "Validating email configuration..."
           python -c "
-import sys
-sys.path.append('.')
-try:
-    from email_sender import EmailSender
-    sender = EmailSender(dry_run=True)
-    print('Email sender configuration validated successfully')
-except Exception as e:
-    print(f'Email sender validation issue: {e}')
-    if '${{ github.event.inputs.dry_run }}' != 'true':
-        print('Warning: Email issues in live mode may cause failures')
-    else:
-        print('Continuing in dry-run mode despite email configuration issues')
-"
+          import sys
+          sys.path.append('.')
+          try:
+            from email_sender import EmailSender
+            sender = EmailSender(dry_run=True)
+            print('Email sender configuration validated successfully')
+          except Exception as e:
+            print(f'Email sender validation issue: {e}')
+            if '${{ github.event.inputs.dry_run }}' != 'true':
+              print('Warning: Email issues in live mode may cause failures')
+            else:
+              print('Continuing in dry-run mode despite email configuration issues') """
 
       - name: Setup tracking and feedback systems using YOUR scripts
         run: |

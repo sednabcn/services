@@ -6,6 +6,7 @@ import json
 import csv
 import re
 from datetime import datetime
+from data_loader import load_contacts_directory
 
 # Environment detection and library availability checks
 IS_REMOTE = os.getenv('GITHUB_ACTIONS') is not None or os.getenv('CI') is not None

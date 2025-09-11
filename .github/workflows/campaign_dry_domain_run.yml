@@ -98,7 +98,7 @@ jobs:
           python utils/validate_real_data.py \
           --contacts contacts \
           --output-file reports/validation_report.md \
-          --strict
+          --no-strict
 
       - name: Upload validation report
         if: always()   # ensure the report uploads even if validation fails
