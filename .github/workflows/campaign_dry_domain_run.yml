@@ -204,14 +204,9 @@ jobs:
           echo "To use real data, add .url files with Google Sheets URLs to the contacts directory"
           
           if [ -z "$(ls -A "$CONTACTS_DIR" 2>/dev/null)" ]; then
-            echo "Creating minimal test contact data..."
-            cat > "$CONTACTS_DIR/minimal_test.csv" << 'EOF'
-name,email,company,domain
-Test User,test@example.com,Test Corp,example.com
-Demo User,demo@testdomain.com,Demo Inc,testdomain.com
-EOF
-            echo "✅ Created minimal_test.csv (2 test contacts)"
-            echo "⚠️  THIS IS TEST DATA - Replace with real .url files pointing to Google Sheets"
+            echo "❌ No contact data found in $CONTACTS_DIR"
+            echo "⚠️ Please add real .url files (Google Sheets), CSV, Excel, or DOCX contacts."
+            exit 1
           fi
           
           if [ -z "$(ls -A "$SCHEDULED_DIR" 2>/dev/null)" ]; then
