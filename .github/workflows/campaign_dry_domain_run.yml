@@ -95,7 +95,7 @@ jobs:
       - name: Validate real data
         run: |
           echo "🔍 Running real data validation..."
-          python validate_real_data.py \
+          python utils/validate_real_data.py \
           --contacts contacts \
           --output-file reports/validation_report.md \
           --strict

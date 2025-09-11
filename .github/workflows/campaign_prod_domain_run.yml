@@ -155,17 +155,17 @@ jobs:
           
           if [ -f "email_sender.py" ]; then
             echo "✅ Found email_sender.py"
-            python -c "
-import sys
-sys.path.append('.')
-try:
-    from email_sender import EmailSender
-    sender = EmailSender(dry_run=True)
-    print('✅ email_sender.py imports and initializes successfully')
-except Exception as e:
-    print(f'⚠️ Email sender warning: {e}')
-"
-            validation_report+="## Email Sender: PASSED\n"
+            python -c """
+            import sys
+            sys.path.append('.')
+            try:
+              from email_sender import EmailSender
+              sender = EmailSender(dry_run=True)
+              print('✅ email_sender.py imports and initializes successfully')
+             except Exception as e:
+               print(f'⚠️ Email sender warning: {e}') """
+               
+             validation_report+="## Email Sender: PASSED\n"
           else
             echo "❌ email_sender.py not found"
             overall_status=1
