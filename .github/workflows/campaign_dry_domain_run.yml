@@ -208,21 +208,25 @@ jobs:
             echo "⚠️ Please add real .url files (Google Sheets), CSV, Excel, or DOCX contacts."
             exit 1
           fi
-          
+
+
+
+          mkdir -p "$SCHEDULED_DIR"
+
           if [ -z "$(ls -A "$SCHEDULED_DIR" 2>/dev/null)" ]; then
-            echo "Creating minimal test campaign..."
-            cat > "$SCHEDULED_DIR/test_campaign.txt" << 'EOF'
-Subject: Test Campaign - {company}
-Hello {name},
+             echo "Creating minimal test campaign..."
+             cat > "$SCHEDULED_DIR/test_campaign.txt" << 'EOF'
+          Subject: Test Campaign - {company}
+          Hello {name},
 
-This is a minimal test campaign for {company}.
+          This is a minimal test campaign for {company}.
 
-Best regards,
-Test Campaign System
+          Best regards,
+          Test Campaign System
 
-Domain: {domain}
-EOF
-            echo "✅ Created minimal test campaign"
+          Domain: {domain}
+          EOF
+          echo "✅ Created minimal test campaign"
           fi
 
       - name: Skip test data creation (real data mode)

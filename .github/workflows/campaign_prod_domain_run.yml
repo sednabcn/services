@@ -131,6 +131,7 @@ jobs:
           
           if [ -f "email_campaign_system.py" ]; then
             echo "✅ Found email_campaign_system.py"
+
             python -c "import sys; sys.path.append('.'); \
 try: from email_campaign_system import ContactParser, EmailSender, campaign_main; \
 print('✅ email_campaign_system.py imports successfully'); \
@@ -138,8 +139,10 @@ print('  - ContactParser class available'); \
 print('  - EmailSender class available'); \
 print('  - campaign_main function available') \
 except Exception as e: \
-print(f'❌ Import error: {e}'); sys.exit(1)" || { overall_status=1; echo "❌ email_campaign_system.py import failed"; }
-            validation_report+="## Main Campaign System: $([ $overall_status -eq 0 ] && echo 'PASSED' || echo 'FAILED')\n"
+    print(f'❌ Import error: {e}'); sys.exit(1)" \
+|| { overall_status=1; echo "❌ email_campaign_system.py import failed"; }
+
+             validation_report+="## Main Campaign System: $([ $overall_status -eq 0 ] && echo 'PASSED' || echo 'FAILED')\n"
           else
             echo "❌ email_campaign_system.py not found"
             overall_status=1
