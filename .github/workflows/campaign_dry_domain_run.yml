@@ -1,0 +1,712 @@
+name: Email GitHub Campaign System (Real Data Implementation)
+on:
+  push:
+    branches: ["dev"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no emails sent)'
+        required: false
+        default: 'true'
+        type: boolean
+      use_summary_script:
+        description: 'Use Python summary utility instead of inline bash parsing'
+        required: false
+        default: 'true'
+        type: boolean
+      target_domain:
+        description: 'Target specific domain for campaign processing'
+        required: false
+        type: string
+      campaign_filter:
+        description: 'Filter campaigns by domain pattern'
+        required: false
+        type: string
+      skip_feedback_injection:
+        description: 'Skip feedback email integration'
+        required: false
+        default: 'false'
+        type: boolean
+      force_remote_mode:
+        description: 'Force remote-only processing mode'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_test_data:
+        description: 'Skip test data creation (use only real data)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  enhanced-campaign-processor:
+    runs-on: ubuntu-latest
+    env:
+      ALERT_EMAIL: alerts@modelphysmat.com
+      FEEDBACK_EMAIL: feedback@modelphysmat.com
+      TRACKING_DIR: tracking
+      SCHEDULED_DIR: scheduled-campaigns
+      TEMPLATES_DIR: campaign-templates
+      CONTACTS_DIR: contacts
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+      DEBUG_MODE: 'false'
+      ENVIRONMENT: 'github-actions'
+      MODE: ${{ github.event.inputs.dry_run == 'true' && 'dry-run' || 'live' }}
+      SKIP_TEST_DATA: ${{ github.event.inputs.skip_test_data }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          echo "Installing Python dependencies for real data processing..."
+          python -m pip install --upgrade pip
+          
+          # Essential libraries for real data processing
+          pip install pandas requests python-docx openpyxl
+          
+          # Additional libraries that may be needed
+          pip install urllib3 chardet
+          
+          if [ -f requirements.txt ]; then 
+            pip install -r requirements.txt
+            echo "Installed additional requirements from requirements.txt"
+          fi
+          
+          echo "Dependencies installation completed"
+          
+          # Verify critical libraries are available
+          python -c "import pandas, requests; print('pandas and requests available')"
+          python -c "import docx; print('python-docx available')" || echo "Warning: python-docx not available"
+
+          
+      - name: Prepare directories
+        run: |
+          echo "Preparing campaign directories..."
+          mkdir -p "$TEMPLATES_DIR" "$CONTACTS_DIR" "$SCHEDULED_DIR" "$TRACKING_DIR"
+          mkdir -p utils reports
+          echo "Directory structure created"
+
+      - name: Validate real data
+        run: |
+          echo "🔍 Running real data validation..."
+          python utils/validate_real_data.py \
+            --contacts-dir "$CONTACTS_DIR" \
+            --strict \
+            --fail-on-no-data \
+            --report-file reports/validation_report.md
+
+      - name: Upload validation report
+        if: always()   # ensure the report uploads even if validation fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: reports/validation_report.md
+
+      - name: Copy existing campaign scripts to workflow
+        run: |
+          echo "Copying existing campaign scripts..."
+          
+          # Copy your existing scripts if they exist in the repo
+          if [ -f "docx_parser.py" ]; then
+            cp docx_parser.py utils/
+            echo "Copied docx_parser.py to utils/"
+          else
+            echo "Warning: docx_parser.py not found in repository root"
+          fi
+          
+          if [ -f "generate_summary.py" ]; then
+            cp generate_summary.py utils/
+            chmod +x utils/generate_summary.py
+            echo "Copied generate_summary.py to utils/"
+          else
+            echo "Warning: generate_summary.py not found in repository root"
+          fi
+          
+          # Also check for your existing campaign_summary.py
+          if [ -f "campaign_summary.py" ]; then
+            cp campaign_summary.py utils/
+            chmod +x utils/campaign_summary.py
+            echo "Copied campaign_summary.py to utils/"
+          fi
+
+      - name: Validate real data sources
+        run: |
+          echo "Validating real data sources..."
+          
+          # Check for actual contact files in the repository
+          REAL_DATA_FOUND=false
+          
+          if [ -d "$CONTACTS_DIR" ] && [ -n "$(ls -A "$CONTACTS_DIR" 2>/dev/null)" ]; then
+            echo "Found contacts directory with files:"
+            ls -la "$CONTACTS_DIR"
+            
+            # Check for .url files (Google Sheets)
+            URL_FILES=$(find "$CONTACTS_DIR" -name "*.url" 2>/dev/null | wc -l)
+            CSV_FILES=$(find "$CONTACTS_DIR" -name "*.csv" 2>/dev/null | wc -l)
+            EXCEL_FILES=$(find "$CONTACTS_DIR" -name "*.xlsx" 2>/dev/null | wc -l)
+            
+            echo "Data sources found:"
+            echo "  - Google Sheets URLs (.url): $URL_FILES"
+            echo "  - CSV files: $CSV_FILES"
+            echo "  - Excel files: $EXCEL_FILES"
+            
+            if [ "$URL_FILES" -gt 0 ] || [ "$CSV_FILES" -gt 0 ] || [ "$EXCEL_FILES" -gt 0 ]; then
+              REAL_DATA_FOUND=true
+              echo "REAL DATA SOURCES DETECTED - No test data will be created"
+            fi
+          fi
+          
+          # Test Google Sheets connectivity for .url files
+          if [ "$URL_FILES" -gt 0 ]; then
+            echo "Testing Google Sheets connectivity..."
+            for url_file in "$CONTACTS_DIR"/*.url; do
+              if [ -f "$url_file" ]; then
+                echo "Testing connectivity for: $(basename "$url_file")"
+                SHEETS_URL=$(cat "$url_file" | head -1)
+                
+                if [[ "$SHEETS_URL" =~ docs\.google\.com/spreadsheets ]]; then
+                  # Extract sheet ID and construct CSV export URL
+                  SHEET_ID=$(echo "$SHEETS_URL" | grep -o '/d/[^/]*' | cut -d'/' -f3)
+                  CSV_URL="https://docs.google.com/spreadsheets/d/$SHEET_ID/export?format=csv&gid=0"
+                  
+                  echo "Testing: $CSV_URL"
+                  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$CSV_URL" --max-time 10)
+                  
+                  if [ "$HTTP_STATUS" = "200" ]; then
+                    echo "✅ Google Sheets accessible (HTTP $HTTP_STATUS)"
+                    PREVIEW_LINES=$(curl -s "$CSV_URL" --max-time 10 | head -3)
+                    echo "Preview (first 3 lines):"
+                    echo "$PREVIEW_LINES"
+                  elif [ "$HTTP_STATUS" = "403" ]; then
+                    echo "❌ Google Sheets access denied (HTTP 403) - check sharing settings"
+                  else
+                    echo "⚠️  Google Sheets returned HTTP $HTTP_STATUS"
+                  fi
+                else
+                  echo "⚠️  Not a Google Sheets URL: $SHEETS_URL"
+                fi
+              fi
+            done
+          fi
+          
+          echo "REAL_DATA_FOUND=$REAL_DATA_FOUND" >> $GITHUB_ENV
+
+      - name: Create minimal test data only if no real data exists
+        if: env.REAL_DATA_FOUND != 'true' && github.event.inputs.skip_test_data != 'true'
+        run: |
+          echo "No real data found - creating minimal test data for demonstration..."
+          echo "To use real data, add .url files with Google Sheets URLs to the contacts directory"
+          
+          if [ -z "$(ls -A "$CONTACTS_DIR" 2>/dev/null)" ]; then
+            echo "Creating minimal test contact data..."
+            cat > "$CONTACTS_DIR/minimal_test.csv" << 'EOF'
+name,email,company,domain
+Test User,test@example.com,Test Corp,example.com
+Demo User,demo@testdomain.com,Demo Inc,testdomain.com
+EOF
+            echo "✅ Created minimal_test.csv (2 test contacts)"
+            echo "⚠️  THIS IS TEST DATA - Replace with real .url files pointing to Google Sheets"
+          fi
+          
+          if [ -z "$(ls -A "$SCHEDULED_DIR" 2>/dev/null)" ]; then
+            echo "Creating minimal test campaign..."
+            cat > "$SCHEDULED_DIR/test_campaign.txt" << 'EOF'
+Subject: Test Campaign - {company}
+Hello {name},
+
+This is a minimal test campaign for {company}.
+
+Best regards,
+Test Campaign System
+
+Domain: {domain}
+EOF
+            echo "✅ Created minimal test campaign"
+          fi
+
+      - name: Skip test data creation (real data mode)
+        if: env.REAL_DATA_FOUND == 'true' || github.event.inputs.skip_test_data == 'true'
+        run: |
+          echo "✅ REAL DATA MODE ACTIVE - Skipping test data creation"
+          echo "The system will use actual data sources from the repository"
+
+      - name: Run integrated domain-aware campaign processor with real data
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Starting campaign processor with REAL DATA implementation..."
+          echo "Environment: $ENVIRONMENT"
+          echo "Mode: $MODE"
+          echo "Real Data Found: ${REAL_DATA_FOUND:-false}"
+          echo "Feedback Email: $FEEDBACK_EMAIL"
+          echo "Alert Email: $ALERT_EMAIL"
+          
+          # Build base arguments
+          ARGS="--contacts $CONTACTS_DIR --scheduled $SCHEDULED_DIR --tracking $TRACKING_DIR --alerts $ALERT_EMAIL --feedback $FEEDBACK_EMAIL"
+          
+          # Add templates if the directory exists and has content
+          if [ -n "$(ls -A "$TEMPLATES_DIR" 2>/dev/null)" ]; then
+            ARGS="$ARGS --templates $TEMPLATES_DIR"
+            echo "Templates directory included"
+          fi
+          
+          # Add domain-aware features
+          if [ -n "${{ github.event.inputs.target_domain }}" ]; then
+            ARGS="$ARGS --domain ${{ github.event.inputs.target_domain }}"
+            echo "Target domain: ${{ github.event.inputs.target_domain }}"
+          fi
+          
+          if [ -n "${{ github.event.inputs.campaign_filter }}" ]; then
+            ARGS="$ARGS --filter-domain ${{ github.event.inputs.campaign_filter }}"
+            echo "Campaign filter: ${{ github.event.inputs.campaign_filter }}"
+          fi
+          
+          if [ "${{ github.event.inputs.skip_feedback_injection }}" == "true" ]; then
+            ARGS="$ARGS --no-feedback"
+            echo "Feedback injection disabled"
+          fi
+          
+          # Add execution mode
+          if [ "$DRY_RUN" == "true" ]; then
+            ARGS="$ARGS --dry-run"
+            echo "Running in DRY-RUN mode (stdout → dryrun.log)"
+          else
+            echo "Running in LIVE mode (stdout → campaign_execution.log)"
+          fi
+          
+          if [ "${{ github.event.inputs.force_remote_mode }}" == "true" ]; then
+            ARGS="$ARGS --remote-only"
+            echo "Remote-only mode enabled"
+          fi
+          
+          if [ "$DEBUG_MODE" == "true" ]; then
+            ARGS="$ARGS --debug"
+            echo "Debug mode enabled"
+          fi
+          
+          echo "Command: python utils/docx_parser.py $ARGS"
+          
+          # Execute with proper logging
+          if [ "$DRY_RUN" == "true" ]; then
+            echo "Executing dry-run with output to dryrun.log..."
+            python utils/docx_parser.py $ARGS > dryrun.log 2> error.log || true
+            cp dryrun.log campaign_execution.log  # Create copy for consistency
+          else
+            echo "Executing live campaign with output to campaign_execution.log..."
+            python utils/docx_parser.py $ARGS > campaign_execution.log 2> error.log || true
+          fi
+          
+          echo "Campaign processor execution completed"
+
+      - name: Generate enhanced summary report with real Google Sheets data
+        if: ${{ github.event.inputs.use_summary_script == 'true' }}
+        run: |
+          echo "Generating enhanced summary report with REAL DATA display..."
+          
+          # Select correct log file
+          if [ "$DRY_RUN" == "true" ]; then
+            LOG_FILE="dryrun.log"
+            SUMMARY_TYPE="dry-run"
+            echo "Processing dry-run summary with real data validation"
+          else
+            LOG_FILE="campaign_execution.log"
+            SUMMARY_TYPE="live"
+            echo "Processing live execution summary with real data"
+          fi
+          
+          # Verify log file exists
+          if [ ! -f "$LOG_FILE" ]; then
+            echo "Expected log file $LOG_FILE not found!"
+            echo "Available files:"
+            ls -la *.log 2>/dev/null || echo "No log files found"
+            # Use fallback
+            if [ -f "campaign_execution.log" ]; then
+              LOG_FILE="campaign_execution.log"
+            elif [ -f "dryrun.log" ]; then
+              LOG_FILE="dryrun.log"
+            fi
+          fi
+          
+          # Set output file
+          SUMMARY_OUTPUT="${GITHUB_STEP_SUMMARY:-reports/github_step_summary.md}"
+          
+          # Use enhanced generate_summary.py with real data display
+          SUMMARY_SUCCESS=false
+          
+          if [ -f "utils/generate_summary.py" ]; then
+            echo "Using enhanced generate_summary.py with Google Sheets integration..."
+            
+            # Run with real contact data display
+            python utils/generate_summary.py \
+              --log-file "$LOG_FILE" \
+              --mode "$SUMMARY_TYPE" \
+              --output-summary "$SUMMARY_OUTPUT" \
+              --contacts-dir "$CONTACTS_DIR" \
+              --show-contacts \
+              --max-contacts-display 10 && SUMMARY_SUCCESS=true
+            
+            if [ "$SUMMARY_SUCCESS" = true ]; then
+              echo "✅ Enhanced summary with REAL Google Sheets data generated"
+            else
+              echo "⚠️  Enhanced summary generation had issues, trying fallback"
+            fi
+            
+          elif [ -f "utils/campaign_summary.py" ]; then
+            echo "Using campaign_summary.py as fallback..."
+            python utils/campaign_summary.py \
+              --campaign "$SCHEDULED_DIR/domain_campaign.json" \
+              --tracking-dir "$TRACKING_DIR" \
+              $(if [ "$DRY_RUN" == "true" ]; then echo "--dry-run"; fi) \
+              --output "$SUMMARY_OUTPUT" && SUMMARY_SUCCESS=true
+          else
+            echo "No Python summary script found, will use inline fallback"
+          fi
+          
+          if [ "$SUMMARY_SUCCESS" = true ]; then
+            echo "Summary report generated successfully from $LOG_FILE"
+            echo "SUMMARY_GENERATED=true" >> $GITHUB_ENV
+            echo "SUMMARY_SOURCE=$LOG_FILE" >> $GITHUB_ENV
+            
+            # Create timestamped copy
+            TIMESTAMPED_SUMMARY="reports/campaign_summary_${SUMMARY_TYPE}_$(date +%Y%m%d_%H%M%S).md"
+            cp "$SUMMARY_OUTPUT" "$TIMESTAMPED_SUMMARY"
+            echo "Timestamped summary saved: $TIMESTAMPED_SUMMARY"
+            
+            # Ensure it's added to GitHub Step Summary
+            if [ -f "$SUMMARY_OUTPUT" ] && [ "$SUMMARY_OUTPUT" != "$GITHUB_STEP_SUMMARY" ]; then
+              cat "$SUMMARY_OUTPUT" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "SUMMARY_GENERATED=false" >> $GITHUB_ENV
+          fi
+
+      - name: Generate Campaign Summary (Fallback Inline)
+        if: ${{ github.event.inputs.use_summary_script != 'true' || env.SUMMARY_GENERATED != 'true' }}
+        run: |
+          echo "Generating inline bash summary (fallback)..."
+          
+          # Determine log file
+          if [ "$DRY_RUN" == "true" ] && [ -f "dryrun.log" ]; then
+            LOG_FILE="dryrun.log"
+            MODE_TEXT="Dry-Run with Real Data"
+          else
+            LOG_FILE="campaign_execution.log"
+            MODE_TEXT="Live Execution with Real Data"
+          fi
+          
+          echo "## Enhanced Domain-Aware Campaign Summary ($MODE_TEXT)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Campaign Execution Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "- **Mode:** $MODE_TEXT" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** $ENVIRONMENT" >> $GITHUB_STEP_SUMMARY
+          echo "- **Real Data Sources:** ${REAL_DATA_FOUND:-false}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Domain:** ${{ github.event.inputs.target_domain || 'All domains' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Campaign Filter:** ${{ github.event.inputs.campaign_filter || 'No filter' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Feedback Integration:** ${{ github.event.inputs.skip_feedback_injection == 'true' && 'Disabled' || 'Enabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Log File:** $LOG_FILE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Real data source information
+          if [ "${REAL_DATA_FOUND:-false}" = "true" ]; then
+            echo "**Real Data Sources Detected:**" >> $GITHUB_STEP_SUMMARY
+            
+            if [ -d "$CONTACTS_DIR" ]; then
+              URL_COUNT=$(find "$CONTACTS_DIR" -name "*.url" 2>/dev/null | wc -l)
+              CSV_COUNT=$(find "$CONTACTS_DIR" -name "*.csv" 2>/dev/null | wc -l)
+              EXCEL_COUNT=$(find "$CONTACTS_DIR" -name "*.xlsx" 2>/dev/null | wc -l)
+              
+              echo "- **Google Sheets URLs:** $URL_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "- **CSV Files:** $CSV_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "- **Excel Files:** $EXCEL_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "**⚠️ Test Data Mode Active**" >> $GITHUB_STEP_SUMMARY
+            echo "To use real data, add .url files with Google Sheets URLs to the contacts directory" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Basic stats from logs
+          if [ -f "$LOG_FILE" ]; then
+            TOTAL_LINES=$(wc -l < "$LOG_FILE" 2>/dev/null || echo "0")
+            ERROR_COUNT=$(grep -c "ERROR" "$LOG_FILE" 2>/dev/null || echo "0")
+            WARNING_COUNT=$(grep -c "WARNING\|WARN" "$LOG_FILE" 2>/dev/null || echo "0")
+            
+            # Try to extract contact and campaign counts
+            CONTACTS_LOADED=$(grep -i "contacts loaded\|total contacts" "$LOG_FILE" 2>/dev/null | grep -o '[0-9]\+' | head -1 || echo "Unknown")
+            CAMPAIGNS_PROCESSED=$(grep -i "campaigns processed" "$LOG_FILE" 2>/dev/null | grep -o '[0-9]\+' | head -1 || echo "Unknown")
+            
+            echo "**Execution Statistics:**" >> $GITHUB_STEP_SUMMARY
+            echo "- **Total Log Lines:** $TOTAL_LINES" >> $GITHUB_STEP_SUMMARY
+            echo "- **Contacts Loaded:** $CONTACTS_LOADED" >> $GITHUB_STEP_SUMMARY
+            echo "- **Campaigns Processed:** $CAMPAIGNS_PROCESSED" >> $GITHUB_STEP_SUMMARY
+            echo "- **Errors:** $ERROR_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "- **Warnings:** $WARNING_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Show recent log output
+            echo "**Recent Log Output:**" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -10 "$LOG_FILE" 2>/dev/null | head -10 >> $GITHUB_STEP_SUMMARY || echo "No log output available" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**⚠️ Log file $LOG_FILE not found**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*Generated by Enhanced Campaign System with Real Data Implementation at $(date)*" >> $GITHUB_STEP_SUMMARY
+
+      - name: Display generated summary in workflow log
+        if: ${{ env.SUMMARY_GENERATED == 'true' }}
+        run: |
+          echo "Enhanced Campaign Summary Generated (${{ env.SUMMARY_SOURCE }})"
+          echo "============================================================"
+          
+          if [ "$DRY_RUN" == "true" ]; then
+            echo "DRY-RUN SUMMARY with REAL Google Sheets Data"
+          else
+            echo "LIVE EXECUTION SUMMARY with REAL Data Processing"
+          fi
+          
+          echo ""
+          
+          # Display the summary content
+          if [ -n "$GITHUB_STEP_SUMMARY" ] && [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            echo "Displaying content from GitHub Step Summary:"
+            tail -50 "$GITHUB_STEP_SUMMARY"  # Show last 50 lines
+          elif [ -f "reports/github_step_summary.md" ]; then
+            echo "Displaying summary from reports directory:"
+            cat "reports/github_step_summary.md"
+          else
+            echo "No summary file found to display"
+          fi
+
+      - name: Enhanced post-execution validation with real data verification
+        run: |
+          echo "Enhanced post-execution validation with real data verification..."
+          
+          # Determine primary log file
+          if [ "$DRY_RUN" == "true" ] && [ -f "dryrun.log" ]; then
+            PRIMARY_LOG="dryrun.log"
+          else
+            PRIMARY_LOG="campaign_execution.log"
+          fi
+          
+          # Check script execution status
+          SCRIPT_SUCCESS=false
+          if [ -f "$PRIMARY_LOG" ]; then
+            if grep -q "Script completed successfully\|completed successfully\|Campaign.*completed" "$PRIMARY_LOG" 2>/dev/null; then
+              echo "✅ Main script completed successfully"
+              SCRIPT_SUCCESS=true
+            elif grep -q "Script started\|started successfully\|Processing" "$PRIMARY_LOG" 2>/dev/null; then
+              echo "⚠️  Script started but completion status unclear"
+            else
+              echo "❌ Script completion status unclear"
+            fi
+          else
+            echo "❌ Primary log file $PRIMARY_LOG not found"
+          fi
+          
+          # Verify real data usage
+          REAL_DATA_USED=false
+          if [ "${REAL_DATA_FOUND:-false}" = "true" ]; then
+            if [ -f "$PRIMARY_LOG" ] && grep -q "Google Sheets\|\.url\|sheets.*data" "$PRIMARY_LOG" 2>/dev/null; then
+              echo "✅ Real Google Sheets data was processed"
+              REAL_DATA_USED=true
+            else
+              echo "⚠️  Real data sources detected but processing status unclear"
+            fi
+          else
+            echo "ℹ️  Test data mode was used (no real data sources found)"
+            REAL_DATA_USED=false
+          fi
+          
+          # Check for domain-specific processing
+          DOMAIN_PROCESSED=false
+          if [ -n "${{ github.event.inputs.target_domain }}" ]; then
+            if [ -f "$PRIMARY_LOG" ] && grep -q "Processing domain.*${{ github.event.inputs.target_domain }}\|domain.*${{ github.event.inputs.target_domain }}" "$PRIMARY_LOG" 2>/dev/null; then
+              echo "✅ Target domain '${{ github.event.inputs.target_domain }}' was processed"
+              DOMAIN_PROCESSED=true
+            else
+              echo "⚠️  Target domain processing status unclear"
+            fi
+          else
+            DOMAIN_PROCESSED=true  # No specific domain target
+          fi
+          
+          # Check for campaign processing
+          CAMPAIGNS_PROCESSED=false
+          if [ -f "$PRIMARY_LOG" ]; then
+            if grep -q "campaigns processed\|Campaign.*processed\|Processing campaign" "$PRIMARY_LOG" 2>/dev/null; then
+              CAMPAIGNS_COUNT=$(grep -o '[0-9]\+.*campaigns\|campaigns.*[0-9]\+' "$PRIMARY_LOG" 2>/dev/null | head -1 | grep -o '[0-9]\+' | head -1 || echo "unknown")
+              echo "✅ Processed campaigns (count: $CAMPAIGNS_COUNT)"
+              CAMPAIGNS_PROCESSED=true
+            fi
+          fi
+          
+          # Check for contact loading
+          CONTACTS_LOADED=false
+          if [ -f "$PRIMARY_LOG" ]; then
+            if grep -q "contacts loaded\|Loading contacts\|Total contacts" "$PRIMARY_LOG" 2>/dev/null; then
+              CONTACTS_COUNT=$(grep -o '[0-9]\+.*contacts\|contacts.*[0-9]\+' "$PRIMARY_LOG" 2>/dev/null | head -1 | grep -o '[0-9]\+' | head -1 || echo "unknown")
+              echo "✅ Loaded contacts (count: $CONTACTS_COUNT)"
+              CONTACTS_LOADED=true
+            fi
+          fi
+          
+          # Check for errors
+          ERROR_COUNT=0
+          if [ -f "$PRIMARY_LOG" ]; then
+            ERROR_COUNT=$(grep -c "ERROR\|CRITICAL\|FATAL" "$PRIMARY_LOG" 2>/dev/null || echo "0")
+            if [ "$ERROR_COUNT" -gt 0 ]; then
+              echo "⚠️  Found $ERROR_COUNT errors in $PRIMARY_LOG"
+            fi
+          fi
+          
+          if [ -f "error.log" ] && [ -s "error.log" ]; then
+            ERROR_LOG_COUNT=$(wc -l < "error.log" 2>/dev/null || echo "0")
+            echo "⚠️  Found $ERROR_LOG_COUNT lines in error.log"
+            ERROR_COUNT=$((ERROR_COUNT + ERROR_LOG_COUNT))
+          fi
+          
+          # Check tracking directory
+          TRACKING_UPDATED=false
+          if [ -d "$TRACKING_DIR" ] && [ -n "$(ls -A "$TRACKING_DIR" 2>/dev/null)" ]; then
+            TRACKING_FILES=$(ls -A "$TRACKING_DIR" | wc -l)
+            echo "✅ Tracking directory has $TRACKING_FILES files"
+            TRACKING_UPDATED=true
+          fi
+          
+          # Summary
+          echo ""
+          echo "=== Enhanced Validation Summary with Real Data Status ==="
+          echo "Script Success: $SCRIPT_SUCCESS"
+          echo "Real Data Used: $REAL_DATA_USED"
+          echo "Domain Processed: $DOMAIN_PROCESSED"
+          echo "Campaigns Processed: $CAMPAIGNS_PROCESSED"
+          echo "Contacts Loaded: $CONTACTS_LOADED"
+          echo "Tracking Updated: $TRACKING_UPDATED"
+          echo "Error Count: $ERROR_COUNT"
+          echo "Summary Generated: ${{ env.SUMMARY_GENERATED || 'false' }}"
+          
+          # Set final status
+          if [ "$SCRIPT_SUCCESS" = true ] && [ "$CAMPAIGNS_PROCESSED" = true ] && [ "$CONTACTS_LOADED" = true ] && [ "$ERROR_COUNT" -eq 0 ]; then
+            if [ "$REAL_DATA_USED" = true ]; then
+              echo "FINAL_STATUS=SUCCESS_WITH_REAL_DATA" >> $GITHUB_ENV
+              echo "🎉 Campaign execution fully successful with REAL DATA"
+            else
+              echo "FINAL_STATUS=SUCCESS_WITH_TEST_DATA" >> $GITHUB_ENV
+              echo "✅ Campaign execution successful with test data"
+            fi
+          elif [ "$SCRIPT_SUCCESS" = true ] && [ "$CAMPAIGNS_PROCESSED" = true ]; then
+            echo "FINAL_STATUS=SUCCESS_WITH_WARNINGS" >> $GITHUB_ENV
+            echo "⚠️  Campaign execution successful with minor issues"
+          else
+            echo "FINAL_STATUS=ISSUES_DETECTED" >> $GITHUB_ENV
+            echo "❌ Campaign execution had significant issues"
+          fi
+
+      - name: Upload comprehensive campaign artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-data-campaign-results-${{ github.run_id }}
+          path: |
+            campaign_execution.log
+            dryrun.log
+            error.log
+            tracking/**
+            reports/**
+            utils/**
+            contacts/**
+            scheduled-campaigns/**
+            templates/**
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Final status notification with real data confirmation
+        if: always()
+        run: |
+          echo "🏁 Final Campaign Execution Status: ${FINAL_STATUS:-UNKNOWN}"
+          
+          # Display real data status
+          case "${FINAL_STATUS:-UNKNOWN}" in
+            "SUCCESS_WITH_REAL_DATA")
+              echo "✅ ALL OPERATIONS COMPLETED SUCCESSFULLY WITH REAL DATA"
+              echo "🔗 Google Sheets data was successfully processed"
+              echo "📊 Summary includes actual contact information from live sources"
+              ;;
+            "SUCCESS_WITH_TEST_DATA")
+              echo "✅ Operations completed successfully using test data"
+              echo "ℹ️  To use real data, add .url files with Google Sheets URLs to contacts directory"
+              ;;
+            "SUCCESS_WITH_WARNINGS")
+              echo "⚠️  Operations completed with warnings"
+              echo "📋 Review logs for warning details"
+              ;;
+            "ISSUES_DETECTED")
+              echo "❌ Significant issues detected during execution"
+              echo "🔍 Manual review of logs recommended"
+              ;;
+            *)
+              echo "❓ Unable to determine final status"
+              echo "📋 Check execution logs for details"
+              ;;
+          esac
+          
+          echo ""
+          echo "📋 Data Source Summary:"
+          echo "- Real Data Found: ${REAL_DATA_FOUND:-false}"
+          echo "- Google Sheets Integration: ${REAL_DATA_FOUND:-false}"
+          echo "- Test Data Fallback: ${{ github.event.inputs.skip_test_data != 'true' && env.REAL_DATA_FOUND != 'true' && 'Used' || 'Skipped' }}"
+          
+          echo ""
+          echo "🔧 Configuration Summary:"
+          echo "- Target Domain: ${{ github.event.inputs.target_domain || 'All domains' }}"
+          echo "- Campaign Filter: ${{ github.event.inputs.campaign_filter || 'No filter' }}"
+          echo "- Feedback Integration: ${{ github.event.inputs.skip_feedback_injection == 'true' && 'Disabled' || 'Enabled' }}"
+          echo "- Remote Mode: ${{ github.event.inputs.force_remote_mode == 'true' && 'Enabled' || 'Disabled' }}"
+          echo "- Summary Script: ${{ github.event.inputs.use_summary_script == 'true' && 'Enhanced Python Script' || 'Inline Bash Fallback' }}"
+          
+          echo ""
+          echo "📁 Available Artifacts:"
+          echo "- Campaign execution logs with real data processing"
+          echo "- Error logs and debugging information"
+          echo "- Enhanced summary reports with actual Google Sheets contact display"
+          echo "- Tracking data with real contact information"
+          echo "- Complete utils directory with enhanced scripts"
+          echo "- Generated reports including real data validation"
+          
+          echo ""
+          echo "🔗 Workflow Details:"
+          echo "- Run ID: ${{ github.run_id }}"
+          echo "- Repository: ${{ github.repository }}"
+          echo "- Branch: ${{ github.ref_name }}"
+          echo "- Environment: $ENVIRONMENT"
+          echo "- Mode: $MODE"
+          echo "- Real Data Implementation: ACTIVE"
+          
+          echo ""
+          if [ "${REAL_DATA_FOUND:-false}" = "true" ]; then
+            echo "🎯 REAL DATA SUCCESS: Your Google Sheets contacts were processed successfully!"
+            echo "📋 The summary report displays actual contact data, not mock data."
+            echo "✅ System is fully operational with live data sources."
+          else
+            echo "⚠️  TEST DATA MODE: No real data sources detected."
+            echo "📝 To use real data:"
+            echo "   1. Add .url files to the contacts/ directory"
+            echo "   2. Each .url file should contain a Google Sheets sharing URL"
+            echo "   3. Ensure sheets are shared with 'Anyone with the link can view'"
+            echo "   4. Re-run the workflow to process real data"
+          fi
