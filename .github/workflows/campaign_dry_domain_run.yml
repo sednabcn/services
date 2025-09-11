@@ -95,11 +95,10 @@ jobs:
       - name: Validate real data
         run: |
           echo "🔍 Running real data validation..."
-          python utils/validate_real_data.py \
-            --contacts-dir "$CONTACTS_DIR" \
-            --strict \
-            --fail-on-no-data \
-            --report-file reports/validation_report.md
+          python validate_real_data.py \
+          --contacts contacts \
+          --output-file reports/validation_report.md \
+          --strict
 
       - name: Upload validation report
         if: always()   # ensure the report uploads even if validation fails
