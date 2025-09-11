@@ -88,178 +88,13 @@ def load_contacts_from_file(contacts_file):
         return []
 
 
-def load_json_campaign(campaign_path):
-    """Load and process JSON campaign file with robust error handling"""
-    try:
-        # Check if file exists and is readable
-        if not os.path.exists(campaign_path):
-            print(f"Error: JSON campaign file not found: {campaign_path}")
-            return None
-            
-        if os.path.getsize(campaign_path) == 0:
-            print(f"Error: JSON campaign file is empty: {campaign_path}")
-            return None
-        
-        # Read file with multiple encoding attempts
-        campaign_data = None
-        encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
-        
-        for encoding in encodings:
-            try:
-                with open(campaign_path, 'r', encoding=encoding) as f:
-                    content = f.read().strip()
-                    if content:
-                        campaign_data = json.loads(content)
-                        break
-            except UnicodeDecodeError:
-                continue
-            except json.JSONDecodeError as e:
-                print(f"JSON parsing error in {campaign_path} (encoding {encoding}): {e}")
-                continue
-        
-        if campaign_data is None:
-            print(f"Error: Could not parse JSON from {campaign_path}")
-            return None
-        
-        print(f"Successfully loaded JSON campaign: {campaign_path}")
-        
-        # Validate and process different JSON formats
-        
-        # Format 1: Simple format with subject and content
-        if 'subject' in campaign_data and 'content' in campaign_data:
-            result = {
-                'subject': str(campaign_data['subject']),
-                'content': str(campaign_data['content']),
-                'from_name': str(campaign_data.get('from_name', 'Campaign System')),
-                'content_type': str(campaign_data.get('content_type', 'html')),
-                'metadata': campaign_data.get('metadata', {})
-            }
-            print(f"Using simple JSON format: subject='{result['subject']}'")
-            return result
-        
-        # Format 2: Multiple campaign variants
-        elif 'campaigns' in campaign_data and isinstance(campaign_data['campaigns'], list):
-            if campaign_data['campaigns']:
-                first_campaign = campaign_data['campaigns'][0]
-                if isinstance(first_campaign, dict):
-                    result = {
-                        'subject': str(first_campaign.get('subject', 'Campaign')),
-                        'content': str(first_campaign.get('content', '')),
-                        'from_name': str(first_campaign.get('from_name', 'Campaign System')),
-                        'content_type': str(first_campaign.get('content_type', 'html')),
-                        'metadata': campaign_data.get('metadata', {})
-                    }
-                    print(f"Using campaigns array format: subject='{result['subject']}'")
-                    return result
-            else:
-                print(f"Warning: Empty campaigns array in {campaign_path}")
-                return None
-        
-        # Format 3: Direct content string (backwards compatibility)
-        elif isinstance(campaign_data, str):
-            result = {
-                'subject': 'Campaign',
-                'content': campaign_data,
-                'from_name': 'Campaign System',
-                'content_type': 'html',
-                'metadata': {}
-            }
-            print(f"Using direct string format")
-            return result
-        
-        # Format 4: Template-based
-        elif 'template' in campaign_data:
-            template_path = os.path.join('campaign-templates', campaign_data['template'])
-            if os.path.exists(template_path):
-                template_content = load_campaign_content(template_path)
-                if template_content:
-                    # Replace template variables
-                    for key, value in campaign_data.get('variables', {}).items():
-                        template_content = template_content.replace(f'{{{{{key}}}}}', str(value))
-                    
-                    result = {
-                        'subject': str(campaign_data.get('subject', 'Campaign')),
-                        'content': template_content,
-                        'from_name': str(campaign_data.get('from_name', 'Campaign System')),
-                        'content_type': str(campaign_data.get('content_type', 'html')),
-                        'metadata': campaign_data.get('metadata', {})
-                    }
-                    print(f"Using template-based format with template: {campaign_data['template']}")
-                    return result
-                else:
-                    print(f"Warning: Could not load template {template_path}")
-            else:
-                print(f"Warning: Template file not found: {template_path}")
-        
-        # Format 5: Try to extract any usable content
-        else:
-            # Look for any string values that might be content
-            potential_content = ""
-            potential_subject = "Campaign"
-            
-            for key, value in campaign_data.items():
-                if isinstance(value, str) and len(value) > 10:
-                    if 'subject' in key.lower() or 'title' in key.lower():
-                        potential_subject = value
-                    elif 'content' in key.lower() or 'body' in key.lower() or 'message' in key.lower():
-                        potential_content = value
-            
-            if potential_content:
-                result = {
-                    'subject': potential_subject,
-                    'content': potential_content,
-                    'from_name': 'Campaign System',
-                    'content_type': 'html',
-                    'metadata': {}
-                }
-                print(f"Using extracted content format: subject='{result['subject']}'")
-                return result
-        
-        # If we get here, the JSON format is not recognized
-        print(f"Warning: Unrecognized JSON campaign format in {campaign_path}")
-        print(f"Available keys: {list(campaign_data.keys()) if isinstance(campaign_data, dict) else 'not a dict'}")
-        
-        # Create a minimal campaign from whatever we have
-        if isinstance(campaign_data, dict):
-            result = {
-                'subject': 'Campaign',
-                'content': f"Content from {os.path.basename(campaign_path)}",
-                'from_name': 'Campaign System',
-                'content_type': 'html',
-                'metadata': campaign_data
-            }
-            return result
-        
-        return None
-        
-    except Exception as e:
-        print(f"Error loading JSON campaign {campaign_path}: {str(e)}")
-        print(f"Exception type: {type(e).__name__}")
-        
-        # Try to provide helpful debugging info
-        try:
-            with open(campaign_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                print(f"File content preview (first 200 chars): {content[:200]}")
-        except:
-            print("Could not read file for debugging")
-        
-        return None
-
-
 def load_campaign_content(campaign_path):
-    """Enhanced campaign content loader with better error handling"""
+    """Load campaign content from various file formats including JSON"""
     try:
-        if not os.path.exists(campaign_path):
-            print(f"Error: Campaign file not found: {campaign_path}")
-            return None
-            
         file_ext = os.path.splitext(campaign_path)[1].lower()
-        print(f"Loading campaign content: {campaign_path} (type: {file_ext})")
         
         if file_ext == '.json':
             return load_json_campaign(campaign_path)
-            
         elif file_ext == '.docx':
             if not DOCX_AVAILABLE:
                 print(f"Warning: python-docx not available, skipping {campaign_path}")
@@ -279,12 +114,7 @@ def load_campaign_content(campaign_path):
                         content += cell.text + " "
                     content += "\n"
             
-            if content.strip():
-                print(f"Loaded DOCX content ({len(content)} characters)")
-                return content.strip()
-            else:
-                print(f"Warning: No content found in DOCX file: {campaign_path}")
-                return None
+            return content.strip()
         
         elif file_ext in ['.txt', '.html', '.md']:
             encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
@@ -293,32 +123,91 @@ def load_campaign_content(campaign_path):
                 try:
                     with open(campaign_path, 'r', encoding=encoding) as f:
                         content = f.read()
-                    if content.strip():
-                        print(f"Loaded text content ({len(content)} characters, encoding: {encoding})")
-                        return content
+                    return content
                 except UnicodeDecodeError:
                     continue
             
             # If all encodings failed, try binary mode
             print(f"Warning: Could not decode {campaign_path} with standard encodings, trying binary")
-            try:
-                with open(campaign_path, 'rb') as f:
-                    raw_content = f.read()
-                content = raw_content.decode('utf-8', errors='ignore')
-                if content.strip():
-                    print(f"Loaded content using binary mode with error handling")
-                    return content
-            except Exception as e:
-                print(f"Error reading file in binary mode: {e}")
-        
-        else:
-            print(f"Warning: Unsupported campaign file type: {file_ext}")
+            with open(campaign_path, 'rb') as f:
+                raw_content = f.read()
+                return raw_content.decode('utf-8', errors='ignore')
         
         return None
         
     except Exception as e:
         print(f"Error loading campaign content from {campaign_path}: {str(e)}")
         return None
+
+
+def load_json_campaign(campaign_path):
+    """Load and process JSON campaign file"""
+    try:
+        with open(campaign_path, 'r', encoding='utf-8') as f:
+            campaign_data = json.load(f)
+        
+        print(f"Loaded JSON campaign: {campaign_path}")
+        
+        # JSON campaign can have multiple formats:
+        # Format 1: Simple format with subject and content
+        if 'subject' in campaign_data and 'content' in campaign_data:
+            return {
+                'subject': campaign_data['subject'],
+                'content': campaign_data['content'],
+                'from_name': campaign_data.get('from_name', 'Campaign System'),
+                'content_type': campaign_data.get('content_type', 'html'),
+                'metadata': campaign_data.get('metadata', {})
+            }
+        
+        # Format 2: Multiple campaign variants
+        elif 'campaigns' in campaign_data:
+            # For now, use the first campaign
+            if campaign_data['campaigns']:
+                first_campaign = campaign_data['campaigns'][0]
+                return {
+                    'subject': first_campaign.get('subject', 'Campaign'),
+                    'content': first_campaign.get('content', ''),
+                    'from_name': first_campaign.get('from_name', 'Campaign System'),
+                    'content_type': first_campaign.get('content_type', 'html'),
+                    'metadata': campaign_data.get('metadata', {})
+                }
+        
+        # Format 3: Direct content (backwards compatibility)
+        elif isinstance(campaign_data, str):
+            return {
+                'subject': 'Campaign',
+                'content': campaign_data,
+                'from_name': 'Campaign System',
+                'content_type': 'html',
+                'metadata': {}
+            }
+        
+        # Format 4: Template-based (if you use templates)
+        elif 'template' in campaign_data:
+            template_path = os.path.join('campaign-templates', campaign_data['template'])
+            if os.path.exists(template_path):
+                template_content = load_campaign_content(template_path)
+                if template_content:
+                    # Replace template variables
+                    for key, value in campaign_data.get('variables', {}).items():
+                        template_content = template_content.replace(f'{{{{{key}}}}}', str(value))
+                    
+                    return {
+                        'subject': campaign_data.get('subject', 'Campaign'),
+                        'content': template_content,
+                        'from_name': campaign_data.get('from_name', 'Campaign System'),
+                        'content_type': campaign_data.get('content_type', 'html'),
+                        'metadata': campaign_data.get('metadata', {})
+                    }
+        
+        print(f"Warning: Unknown JSON campaign format in {campaign_path}")
+        return None
+        
+    except Exception as e:
+        print(f"Error loading JSON campaign {campaign_path}: {str(e)}")
+        return None
+
+
 def extract_subject_from_content(content):
     """Extract subject line from campaign content"""
     try:
