@@ -239,7 +239,7 @@ jobs:
                     echo "---"
                  fi
              done
-        fi       
+          fi       
 
       - name: Skip test data creation (real data mode)
         if: env.REAL_DATA_FOUND == 'true' || github.event.inputs.skip_test_data == 'true'
