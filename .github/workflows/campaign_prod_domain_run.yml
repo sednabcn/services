@@ -817,7 +817,7 @@ jobs:
           EOF
           
           # Enhanced feedback injection setup
-          if [ -f "email_feedback_injector.py" ]; then
+          if [ -f "utils/email_feedback_injector.py" ]; then
             echo "Setting up enhanced feedback injection..."
             python email_feedback_injector.py \
               --campaigns-dir scheduled-campaigns \
@@ -831,9 +831,9 @@ jobs:
           fi
           
           # Enhanced DOCX processing
-          if [ -f "docx_feedback_processor.py" ]; then
+          if [ -f "utils/docx_feedback_processor.py" ]; then
             echo "Processing DOCX templates with enhanced feedback integration..."
-            python docx_feedback_processor.py \
+            python utils/docx_feedback_processor.py \
               --templates-dir campaign-templates \
               --feedback-email "$FEEDBACK_EMAIL" \
               --create-backups \
