@@ -581,8 +581,9 @@ def campaign_main(contacts_root, scheduled_root, tracking_root, alerts_email, dr
             
             print(f"Campaign subject template: {subject}")
             print(f"Content length: {len(content)} characters")
-            print(f"Template variables detected: {len(re.findall(r'\{[^}]+\}|\{\{[^}]+\}\}', content))} in content")
-            
+            template_pattern = r'\{[^}]+\}|\{\{[^}]+\}\}'
+            print(f"Template variables detected: {len(re.findall(template_pattern, content))} in content")
+                      
             # Add recipient IDs for tracking
             if all_contacts:
                 contacts_with_ids = []
