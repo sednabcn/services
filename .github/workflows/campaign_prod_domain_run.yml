@@ -346,94 +346,93 @@ jobs:
           echo "Analyzing campaign templates and domain structure..."
     
           python -c """
-import sys
-import json
-import os
-from pathlib import Path
-from datetime import datetime
+          import sys
+          import json
+          import os
+          from pathlib import Path
+          from datetime import datetime
 
-# Count templates in each domain directory
-domains = ['education', 'finance', 'healthcare', 'industry', 'technology', 'government']
-domain_stats = {}
-total_templates = 0
+          # Count templates in each domain directory
+          domains = ['education', 'finance', 'healthcare', 'industry', 'technology', 'government']
+          domain_stats = {}
+          total_templates = 0
 
-templates_dir = Path('campaign-templates')
-if templates_dir.exists():
-    print('Analyzing campaign templates...')
+          templates_dir = Path('campaign-templates')
+          if templates_dir.exists():
+                  print('Analyzing campaign templates...')
 
-    # Check domain-based structure
-    for domain in domains:
-        domain_path = templates_dir / domain
-        if domain_path.exists():
-            docx_files = list(domain_path.glob('*.docx'))
-            doc_files = list(domain_path.glob('*.doc')) 
-            json_files = list(domain_path.glob('*.json'))
-            txt_files = list(domain_path.glob('*.txt'))
-            html_files = list(domain_path.glob('*.html'))
+                  # Check domain-based structure
+                  for domain in domains:
+                       domain_path = templates_dir / domain
+                       if domain_path.exists():
+                             docx_files = list(domain_path.glob('*.docx'))
+                             doc_files = list(domain_path.glob('*.doc')) 
+                             json_files = list(domain_path.glob('*.json'))
+                             txt_files = list(domain_path.glob('*.txt'))
+                             html_files = list(domain_path.glob('*.html'))
             
-            all_templates = docx_files + doc_files + json_files + txt_files + html_files
+                             all_templates = docx_files + doc_files + json_files + txt_files + html_files
 
-            domain_stats[domain] = {
-                'template_count': len(all_templates),
-                'docx_count': len(docx_files),
-                'json_count': len(json_files),
-                'other_count': len(doc_files + txt_files + html_files),
-                'templates': [t.name for t in all_templates]
-            }
-            total_templates += len(all_templates)
-            print(f'  - {domain}: {len(all_templates)} templates')
-        else:
-            domain_stats[domain] = {
-                'template_count': 0,
-                'docx_count': 0,
-                'json_count': 0,
-                'other_count': 0,
-                'templates': []
-            }
+                             domain_stats[domain] = {
+                             'template_count': len(all_templates),
+                             'docx_count': len(docx_files),
+                             'json_count': len(json_files),
+                             'other_count': len(doc_files + txt_files + html_files),
+                             'templates': [t.name for t in all_templates]
+                             }
+                             total_templates += len(all_templates)
+                             print(f'  - {domain}: {len(all_templates)} templates')
+                       else:
+                            domain_stats[domain] = {
+                            'template_count': 0,
+                            'docx_count': 0,
+                            'json_count': 0,
+                            'other_count': 0,
+                            'templates': []
+                            }
 
-    # Check root level templates
-    root_templates = []
-    for ext in ['*.docx', '*.doc', '*.json', '*.txt', '*.html']:
-        root_templates.extend(list(templates_dir.glob(ext)))
+                  # Check root level templates
+                  root_templates = []
+                  for ext in ['*.docx', '*.doc', '*.json', '*.txt', '*.html']:
+                                   root_templates.extend(list(templates_dir.glob(ext)))
 
-    if root_templates:
-        domain_stats['_root'] = {
-            'template_count': len(root_templates),
-            'templates': [t.name for t in root_templates]
-        }
-        total_templates += len(root_templates)
-        print(f'  - Root level: {len(root_templates)} templates')
+                                   if root_templates:
+                                          domain_stats['_root'] = {
+                                          'template_count': len(root_templates),
+                                          'templates': [t.name for t in root_templates]
+                                          }
+                                          total_templates += len(root_templates)
+                                          print(f'  - Root level: {len(root_templates)} templates')
+                                     
+                                          print(f'Total templates found: {total_templates}')
+                                    else:
+                                          print('campaign-templates directory not found')
 
-    print(f'Total templates found: {total_templates}')
-else:
-    print('campaign-templates directory not found')
+                  # Check scheduled campaigns
+                  scheduled_dir = Path('scheduled-campaigns')
+                  scheduled_campaigns = 0
+                  if scheduled_dir.exists():
+                    for ext in ['*.json', '*.docx', '*.txt', '*.html']:
+                      scheduled_campaigns += len(list(scheduled_dir.glob(ext)))
 
-# Check scheduled campaigns
-scheduled_dir = Path('scheduled-campaigns')
-scheduled_campaigns = 0
-if scheduled_dir.exists():
-    for ext in ['*.json', '*.docx', '*.txt', '*.html']:
-        scheduled_campaigns += len(list(scheduled_dir.glob(ext)))
+                      # Create final analysis dict
+                      domain_analysis = {
+                      'domain_count': len([d for d in domain_stats.values() if d['template_count'] > 0]),
+                      'template_count': total_templates,
+                      'scheduled_campaigns': scheduled_campaigns,
+                      'domains': domain_stats,
+                      'analysis_method': 'direct_filesystem_scan',
+                      'analysis_timestamp': datetime.now().isoformat(),
+                      'target_domain_filter': os.getenv('TARGET_DOMAIN', 'all_domains')
+                      }
 
-# Create final analysis dict
-domain_analysis = {
-    'domain_count': len([d for d in domain_stats.values() if d['template_count'] > 0]),
-    'template_count': total_templates,
-    'scheduled_campaigns': scheduled_campaigns,
-    'domains': domain_stats,
-    'analysis_method': 'direct_filesystem_scan',
-    'analysis_timestamp': datetime.now().isoformat(),
-    'target_domain_filter': os.getenv('TARGET_DOMAIN', 'all_domains')
-}
+                  # Write output to file
+                  with open('domain_analysis.json', 'w') as f:
+                    json.dump(domain_analysis, f, indent=2)
 
-# Write output to file
-with open('domain_analysis.json', 'w') as f:
-    json.dump(domain_analysis, f, indent=2)
-
-# Output summary for GitHub Actions
-print(f"::set-output name=campaigns::{total_templates}")
-print(f"Domain analysis completed: {total_templates} templates across {domain_analysis['domain_count']} active domains")
-    """
+                  # Output summary for GitHub Actions
+                  print(f"::set-output name=campaigns::{total_templates}")
+                  print(f"Domain analysis completed: {total_templates} templates across {domain_analysis['domain_count']} active domains") """
 
 
       - name: Create sample test data if directories are empty
@@ -444,13 +443,13 @@ print(f"Domain analysis completed: {total_templates} templates across {domain_an
           if [ ! "$(ls -A contacts 2>/dev/null)" ]; then
             echo "Creating sample contact data..."
             
-            cat > contacts/sample_contacts.csv << EOF
-name,email,organization,role
-John Doe,john.doe@example.com,Example Corp,Manager
-Jane Smith,jane.smith@test.org,Test Organization,Director
-Bob Johnson,bob.johnson@sample.net,Sample Company,Analyst
-Alice Brown,alice.brown@demo.edu,Demo University,Professor
-EOF
+            cat > contacts/sample_contacts.csv << 'EOF'
+            name,email,organization,role
+            John Doe,john.doe@example.com,Example Corp,Manager
+            Jane Smith,jane.smith@test.org,Test Organization,Director
+            Bob Johnson,bob.johnson@sample.net,Sample Company,Analyst
+            Alice Brown,alice.brown@demo.edu,Demo University,Professor
+            EOF
             
             echo "Sample contacts created in contacts/sample_contacts.csv"
           fi
@@ -460,21 +459,21 @@ EOF
             echo "Creating sample campaign template..."
             
             mkdir -p campaign-templates/education
-            cat > campaign-templates/education/sample_campaign.json << EOF
-{
-  "name": "Sample Education Campaign",
-  "subject": "Educational Partnership Opportunity",
-  "content": "Dear {{name}},\n\nI hope this message finds you well. We are reaching out regarding a potential educational partnership opportunity that aligns with your institution's mission.\n\nWe believe there could be mutual benefits in exploring collaboration opportunities between our organizations.\n\nWould you be interested in discussing this further?\n\nBest regards,\nThe Partnership Team",
-  "from_name": "Partnership Team",
-  "metadata": {
-    "domain": "education",
-    "campaign_type": "partnership",
-    "priority": "medium"
-  }
-}
-EOF
+            cat > campaign-templates/education/sample_campaign.json << 'EOF'
+            {
+            "name": "Sample Education Campaign",
+            "subject": "Educational Partnership Opportunity",
+            "content": "Dear {{name}},\n\nI hope this message finds you well. We are reaching out regarding a potential educational partnership opportunity that aligns with your institution's mission.\n\nWe believe there could be mutual benefits in exploring collaboration opportunities between our organizations.\n\nWould you be interested in discussing this further?\n\nBest regards,\nThe Partnership Team",
+            "from_name": "Partnership Team",
+            "metadata": {
+              "domain": "education",
+              "campaign_type": "partnership",
+              "priority": "medium"
+              }
+              }
+              EOF
             
-            echo "Sample campaign template created in campaign-templates/education/"
+              echo "Sample campaign template created in campaign-templates/education/"
           fi
           
           # Create sample scheduled campaign if directory is empty
@@ -482,19 +481,19 @@ EOF
             echo "Creating sample scheduled campaign..."
             
             cat > scheduled-campaigns/test_campaign.json << EOF
-{
-  "name": "Test Campaign",
-  "subject": "Test Email Campaign - {{name}}",
-  "content": "Hello {{name}},\n\nThis is a test email campaign sent to {{email}}.\n\nBest regards,\nTest Team",
-  "from_name": "Test Team",
-  "metadata": {
-    "campaign_type": "test",
-    "created": "$(date -Iseconds)"
-  }
-}
-EOF
+            {
+            "name": "Test Campaign",
+            "subject": "Test Email Campaign - {{name}}",
+            "content": "Hello {{name}},\n\nThis is a test email campaign sent to {{email}}.\n\nBest regards,\nTest Team",
+            "from_name": "Test Team",
+            "metadata": {
+              "campaign_type": "test",
+              "created": "$(date -Iseconds)"
+              }
+              }
+              EOF
             
-            echo "Sample scheduled campaign created"
+              echo "Sample scheduled campaign created"
           fi
 
       - name: Upload validation artifacts
@@ -586,16 +585,16 @@ EOF
           
           # Initialize tracking with metadata
           cat > tracking/execution_start.json << EOF
-{
-  "workflow_run_id": "${{ github.run_id }}",
-  "execution_start": "$(date -Iseconds)",
-  "mode": "${{ github.event.inputs.dry_run == 'true' && 'dry-run' || 'live' }}",
-  "target_domain": "${{ github.event.inputs.target_domain }}",
-  "batch_size": "${{ github.event.inputs.batch_size || 50 }}",
-  "real_time_tracking": "${{ github.event.inputs.enable_real_time_tracking }}",
-  "debug_mode": "${{ github.event.inputs.debug_mode }}"
-}
-EOF
+          {
+          "workflow_run_id": "${{ github.run_id }}",
+          "execution_start": "$(date -Iseconds)",
+          "mode": "${{ github.event.inputs.dry_run == 'true' && 'dry-run' || 'live' }}",
+          "target_domain": "${{ github.event.inputs.target_domain }}",
+          "batch_size": "${{ github.event.inputs.batch_size || 50 }}",
+          "real_time_tracking": "${{ github.event.inputs.enable_real_time_tracking }}",
+          "debug_mode": "${{ github.event.inputs.debug_mode }}"
+          }
+          EOF
           
           # Setup email feedback injection using YOUR script
           if [ -f "email_feedback_injector.py" ]; then
@@ -661,18 +660,18 @@ EOF
           
           # Save execution metadata
           cat > execution_metadata.json << EOF
-{
-  "execution_status": $EXECUTION_STATUS,
-  "mode": "${{ github.event.inputs.dry_run == 'true' && 'dry-run' || 'live' }}",
-  "target_domain": "${{ github.event.inputs.target_domain }}",
-  "contacts_processed": "${{ needs.validate-and-prepare.outputs.contact_count }}",
-  "templates_available": "${{ needs.validate-and-prepare.outputs.domain_campaigns }}",
-  "execution_time": "$(date -Iseconds)",
-  "workflow_run_id": "${{ github.run_id }}",
-  "processed_with": "YOUR_email_campaign_system.py",
-  "command_used": "email_campaign_system.py with remote-only flag"
-}
-EOF
+          {
+          "execution_status": $EXECUTION_STATUS,
+          "mode": "${{ github.event.inputs.dry_run == 'true' && 'dry-run' || 'live' }}",
+          "target_domain": "${{ github.event.inputs.target_domain }}",
+          "contacts_processed": "${{ needs.validate-and-prepare.outputs.contact_count }}",
+          "templates_available": "${{ needs.validate-and-prepare.outputs.domain_campaigns }}",
+          "execution_time": "$(date -Iseconds)",
+          "workflow_run_id": "${{ github.run_id }}",
+          "processed_with": "YOUR_email_campaign_system.py",
+          "command_used": "email_campaign_system.py with remote-only flag"
+          }
+          EOF
 
       - name: Process real-time feedback using YOUR scripts
         if: github.event.inputs.enable_real_time_tracking == 'true'
@@ -682,87 +681,87 @@ EOF
           # Use your reply tracker if it exists
           if [ -f "reply_tracker.py" ]; then
             echo "Running YOUR reply_tracker.py for real-time feedback..."
-            python -c "
-import sys
-import json
-from datetime import datetime
-sys.path.append('.')
+            python -c """
+            import sys
+            import json
+            from datetime import datetime
+            sys.path.append('.')
 
-try:
-    from reply_tracker import ReplyTracker
+            try:
+               from reply_tracker import ReplyTracker
     
-    # Initialize with environment variables or defaults
-    tracker = ReplyTracker(
-        imap_host='${{ secrets.IMAP_HOST }}' or None,
-        imap_user='${{ secrets.IMAP_USER }}' or None,
-        imap_pass='${{ secrets.IMAP_PASS }}' or None,
-        mark_seen=False  # Don't mark as seen in production
-    )
+               # Initialize with environment variables or defaults
+               tracker = ReplyTracker(
+               imap_host='${{ secrets.IMAP_HOST }}' or None,
+               imap_user='${{ secrets.IMAP_USER }}' or None,
+               imap_pass='${{ secrets.IMAP_PASS }}' or None,
+               mark_seen=False  # Don't mark as seen in production
+              )
     
-    print('Fetching replies with YOUR ReplyTracker...')
-    replies = tracker.fetch_replies()
+              print('Fetching replies with YOUR ReplyTracker...')
+              replies = tracker.fetch_replies()
     
-    print(f'Processed {len(replies)} replies')
+              print(f'Processed {len(replies)} replies')
     
-    # Analyze replies
-    bounces = [r for r in replies if r.get('bounce', False)]
-    feedback_replies = [r for r in replies if r.get('tid') and not r.get('bounce', False)]
+              # Analyze replies
+              bounces = [r for r in replies if r.get('bounce', False)]
+              feedback_replies = [r for r in replies if r.get('tid') and not r.get('bounce', False)]
     
-    # Save comprehensive reply analysis
-    reply_analysis = {
-        'total_replies': len(replies),
-        'bounces': len(bounces),
-        'feedback_replies': len(feedback_replies),
-        'processing_time': datetime.now().isoformat(),
-        'workflow_run_id': '${{ github.run_id }}',
-        'bounce_emails': [r.get('from', '') for r in bounces][:10],  # First 10 for debugging
-        'feedback_emails': [r.get('from', '') for r in feedback_replies][:10]
-    }
+              # Save comprehensive reply analysis
+              reply_analysis = {
+              'total_replies': len(replies),
+              'bounces': len(bounces),
+              'feedback_replies': len(feedback_replies),
+              'processing_time': datetime.now().isoformat(),
+              'workflow_run_id': '${{ github.run_id }}',
+              'bounce_emails': [r.get('from', '') for r in bounces][:10],  # First 10 for debugging
+              'feedback_emails': [r.get('from', '') for r in feedback_replies][:10]
+              }
     
-    # Save to tracking directory
-    import os
-    os.makedirs('tracking/reply_tracking', exist_ok=True)
+              # Save to tracking directory
+              import os
+              os.makedirs('tracking/reply_tracking', exist_ok=True)
     
-    with open('tracking/reply_tracking/reply_analysis.json', 'w') as f:
-        json.dump(reply_analysis, f, indent=2)
+              with open('tracking/reply_tracking/reply_analysis.json', 'w') as f:
+                json.dump(reply_analysis, f, indent=2)
     
-    # Save individual replies for detailed analysis
-    if replies:
-        with open('tracking/reply_tracking/all_replies.json', 'w') as f:
-            json.dump(replies, f, indent=2, default=str)
+                # Save individual replies for detailed analysis
+                if replies:
+                  with open('tracking/reply_tracking/all_replies.json', 'w') as f:
+                    json.dump(replies, f, indent=2, default=str)
     
-    print(f'Reply analysis saved: {len(replies)} total, {len(bounces)} bounces, {len(feedback_replies)} feedback')
+                print(f'Reply analysis saved: {len(replies)} total, {len(bounces)} bounces, {len(feedback_replies)} feedback')
         
-except ImportError as e:
-    print(f'Could not import ReplyTracker: {e}')
-    print('Creating empty reply analysis...')
+            except ImportError as e:
+              print(f'Could not import ReplyTracker: {e}')
+              print('Creating empty reply analysis...')
     
-    import os
-    import json
-    from datetime import datetime
-    
-    os.makedirs('tracking/reply_tracking', exist_ok=True)
-    with open('tracking/reply_tracking/reply_analysis.json', 'w') as f:
-        json.dump({
-            'error': 'ReplyTracker not available',
-            'total_replies': 0,
-            'processing_time': datetime.now().isoformat()
-        }, f, indent=2)
+              import os
+              import json
+              from datetime import datetime
+              
+              os.makedirs('tracking/reply_tracking', exist_ok=True)
+              with open('tracking/reply_tracking/reply_analysis.json', 'w') as f:
+                json.dump({
+                'error': 'ReplyTracker not available',
+                'total_replies': 0,
+                'processing_time': datetime.now().isoformat()
+                }, f, indent=2)
         
-except Exception as e:
-    print(f'Error processing replies: {e}')
-    
-    import os
-    import json
-    from datetime import datetime
-    
-    os.makedirs('tracking/reply_tracking', exist_ok=True)
-    with open('tracking/reply_tracking/reply_analysis.json', 'w') as f:
-        json.dump({
-            'error': str(e),
-            'total_replies': 0,
-            'processing_time': datetime.now().isoformat()
-        }, f, indent=2)
+            except Exception as e:
+              print(f'Error processing replies: {e}')
+              
+              import os
+              import json
+              from datetime import datetime
+              
+              os.makedirs('tracking/reply_tracking', exist_ok=True)
+              with open('tracking/reply_tracking/reply_analysis.json', 'w') as f:
+                json.dump({
+                'error': str(e),
+                'total_replies': 0,
+                'processing_time': datetime.now().isoformat()
+                }, f, indent=2)
 "
           else
             echo "reply_tracker.py not found - skipping reply processing"
@@ -774,110 +773,110 @@ except Exception as e:
         run: |
           echo "Generating comprehensive campaign report..."
           
-          python -c "
-import json
-import os
-from datetime import datetime
-from pathlib import Path
+          python -c """
+          import json
+          import os
+          from datetime import datetime
+          from pathlib import Path
 
-# Load execution data
-try:
-    with open('execution_metadata.json', 'r') as f:
-        exec_data = json.load(f)
-except:
-    exec_data = {'execution_status': 'unknown'}
+          # Load execution data
+          try:
+            with open('execution_metadata.json', 'r') as f:
+              exec_data = json.load(f)
+          except:
+            exec_data = {'execution_status': 'unknown'}
 
-try:
-    with open('contact_analysis.json', 'r') as f:
-        contact_data = json.load(f)
-except:
-    contact_data = {'total_contacts': 0}
+          try:
+            with open('contact_analysis.json', 'r') as f:
+              contact_data = json.load(f)
+          except:
+            contact_data = {'total_contacts': 0}
 
-try:
-    with open('domain_analysis.json', 'r') as f:
-        domain_data = json.load(f)
-except:
-    domain_data = {'template_count': 0}
+          try:
+            with open('domain_analysis.json', 'r') as f:
+              domain_data = json.load(f)
+          except:
+            domain_data = {'template_count': 0}
 
-# Load reply analysis if available
-reply_data = {'total_replies': 0, 'bounces': 0}
-reply_file = Path('tracking/reply_tracking/reply_analysis.json')
-if reply_file.exists():
-    try:
-        with open(reply_file, 'r') as f:
-            reply_data = json.load(f)
-    except:
-        pass
+          # Load reply analysis if available
+          reply_data = {'total_replies': 0, 'bounces': 0}
+          reply_file = Path('tracking/reply_tracking/reply_analysis.json')
+          if reply_file.exists():
+            try:
+              with open(reply_file, 'r') as f:
+                reply_data = json.load(f)
+            except:
+              pass
 
-# Generate detailed report
-report = f'''# Email Campaign Execution Report
+          # Generate detailed report
+          report = f'''# Email Campaign Execution Report
 
-## Execution Summary
-- **Workflow Run ID:** ${{ github.run_id }}
-- **Execution Status:** {'✅ SUCCESS' if exec_data.get('execution_status') == 0 else '❌ FAILED' if exec_data.get('execution_status') == 1 else '⚠️ UNKNOWN'}
-- **Mode:** {exec_data.get('mode', 'unknown')}
-- **Execution Time:** {exec_data.get('execution_time', 'unknown')}
-- **Target Domain:** {exec_data.get('target_domain') or 'All domains'}
+          ## Execution Summary
+          - **Workflow Run ID:** ${{ github.run_id }}
+          - **Execution Status:** {'✅ SUCCESS' if exec_data.get('execution_status') == 0 else '❌ FAILED' if exec_data.get('execution_status') == 1 else '⚠️ UNKNOWN'}
+          - **Mode:** {exec_data.get('mode', 'unknown')}
+          - **Execution Time:** {exec_data.get('execution_time', 'unknown')}
+          - **Target Domain:** {exec_data.get('target_domain') or 'All domains'}
 
-## Contact Analysis
-- **Total Contacts Loaded:** {contact_data.get('total_contacts', 0)}
-- **Contact Sources:** {len(contact_data.get('sources_breakdown', {}))}
-- **Unique Domains:** {len(contact_data.get('domain_breakdown', {}))}
-- **Top Contact Domain:** {list(contact_data.get('domain_breakdown', {}).keys())[0] if contact_data.get('domain_breakdown') else 'None'}
+          ## Contact Analysis
+          - **Total Contacts Loaded:** {contact_data.get('total_contacts', 0)}
+          - **Contact Sources:** {len(contact_data.get('sources_breakdown', {}))}
+          - **Unique Domains:** {len(contact_data.get('domain_breakdown', {}))}
+          - **Top Contact Domain:** {list(contact_data.get('domain_breakdown', {}).keys())[0] if contact_data.get('domain_breakdown') else 'None'}
 
-## Template Analysis  
-- **Total Templates:** {domain_data.get('template_count', 0)}
-- **Active Domains:** {domain_data.get('domain_count', 0)}
-- **Scheduled Campaigns:** {domain_data.get('scheduled_campaigns', 0)}
+          ## Template Analysis  
+          - **Total Templates:** {domain_data.get('template_count', 0)}
+          - **Active Domains:** {domain_data.get('domain_count', 0)}
+          - **Scheduled Campaigns:** {domain_data.get('scheduled_campaigns', 0)}
 
-## Real-time Feedback Analysis
-- **Total Replies:** {reply_data.get('total_replies', 0)}
-- **Bounces Detected:** {reply_data.get('bounces', 0)}
-- **Feedback Responses:** {reply_data.get('feedback_replies', 0)}
+          ## Real-time Feedback Analysis
+          - **Total Replies:** {reply_data.get('total_replies', 0)}
+          - **Bounces Detected:** {reply_data.get('bounces', 0)}
+          - **Feedback Responses:** {reply_data.get('feedback_replies', 0)}
 
-## System Integration
-- **Main Processor:** YOUR email_campaign_system.py
-- **Email Sender:** YOUR email_sender.py  
-- **Reply Tracker:** YOUR reply_tracker.py
-- **Feedback Injector:** YOUR email_feedback_injector.py
-- **DOCX Processor:** YOUR docx_feedback_processor.py
+          ## System Integration
+          - **Main Processor:** YOUR email_campaign_system.py
+          - **Email Sender:** YOUR email_sender.py  
+          - **Reply Tracker:** YOUR reply_tracker.py
+          - **Feedback Injector:** YOUR email_feedback_injector.py
+          - **DOCX Processor:** YOUR docx_feedback_processor.py
 
-## Files Generated
-- Campaign execution log: campaign_execution.log
-- Contact analysis: contact_analysis.json  
-- Domain analysis: domain_analysis.json
-- Execution metadata: execution_metadata.json
-- Reply tracking: tracking/reply_tracking/
+          ## Files Generated
+          - Campaign execution log: campaign_execution.log
+          - Contact analysis: contact_analysis.json  
+          - Domain analysis: domain_analysis.json
+          - Execution metadata: execution_metadata.json
+          - Reply tracking: tracking/reply_tracking/
 
-## Status
-Campaign execution completed using YOUR existing scripts with full integration.
+          ## Status
+          Campaign execution completed using YOUR existing scripts with full integration.
 
----
-*Generated automatically by GitHub Actions workflow*
-*Report timestamp: {datetime.now().isoformat()}*
-'''
+          ---
+          *Generated automatically by GitHub Actions workflow*
+          *Report timestamp: {datetime.now().isoformat()}*
+          '''
 
-# Save detailed report
-with open('campaign_detailed_report.md', 'w') as f:
-    f.write(report)
+          # Save detailed report
+          with open('campaign_detailed_report.md', 'w') as f:
+            f.write(report)
 
-# Also create a summary for GitHub Step Summary
-summary = f'''## 📧 Campaign Execution Summary
+          # Also create a summary for GitHub Step Summary
+          summary = f'''## 📧 Campaign Execution Summary
 
-**Status:** {'✅ SUCCESS' if exec_data.get('execution_status') == 0 else '❌ FAILED' if exec_data.get('execution_status') == 1 else '⚠️ UNKNOWN'}  
-**Mode:** {exec_data.get('mode', 'unknown')}  
-**Contacts:** {contact_data.get('total_contacts', 0)}  
-**Templates:** {domain_data.get('template_count', 0)}  
-**Replies:** {reply_data.get('total_replies', 0)}  
+          **Status:** {'✅ SUCCESS' if exec_data.get('execution_status') == 0 else '❌ FAILED' if exec_data.get('execution_status') == 1 else '⚠️ UNKNOWN'}  
+          **Mode:** {exec_data.get('mode', 'unknown')}  
+          **Contacts:** {contact_data.get('total_contacts', 0)}  
+          **Templates:** {domain_data.get('template_count', 0)}  
+          **Replies:** {reply_data.get('total_replies', 0)}  
 
-**Integration:** Using YOUR existing scripts from repository root
-'''
+          **Integration:** Using YOUR existing scripts from repository root
+          '''
 
-with open('campaign_summary.md', 'w') as f:
-    f.write(summary)
+          with open('campaign_summary.md', 'w') as f:
+            f.write(summary)
 
-print('Campaign reports generated successfully')
-"
+          print('Campaign reports generated successfully') '''
+
 
       - name: Create GitHub Issue notification
         if: always()
@@ -886,90 +885,89 @@ print('Campaign reports generated successfully')
         run: |
           echo "Creating GitHub issue notification..."
           
-          python -c "
-import sys
-import os
-import requests
-import json
+          python -c """
+          import sys
+          import os
+          import requests
+          import json
 
-github_token = os.environ.get('GITHUB_TOKEN')
-if not github_token:
-    print('No GitHub token available - skipping issue creation')
-    sys.exit(0)
+          github_token = os.environ.get('GITHUB_TOKEN')
+          if not github_token:
+            print('No GitHub token available - skipping issue creation')
+            sys.exit(0)
 
-repo = '${{ github.repository }}'
-execution_status = os.environ.get('EXECUTION_STATUS', 'unknown')
-status_emoji = '✅' if execution_status == '0' else '❌' if execution_status == '1' else '⚠️'
+          repo = '${{ github.repository }}'
+          execution_status = os.environ.get('EXECUTION_STATUS', 'unknown')
+          status_emoji = '✅' if execution_status == '0' else '❌' if execution_status == '1' else '⚠️'
+          
+          title = f'Campaign Execution Report - Run ${{ github.run_id }} {status_emoji}'
+          body = f'''# Email Campaign Execution Report
 
-title = f'Campaign Execution Report - Run ${{ github.run_id }} {status_emoji}'
-body = f'''# Email Campaign Execution Report
+          **Workflow Run ID:** ${{ github.run_id }}  
+          **Status:** {status_emoji} {execution_status}  
+          **Mode:** ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}  
+          **Contacts Processed:** ${{ needs.validate-and-prepare.outputs.contact_count }}  
+          **Templates Available:** ${{ needs.validate-and-prepare.outputs.domain_campaigns }}  
+          **Target Domain:** ${{ github.event.inputs.target_domain or 'All domains' }}  
+          **Timestamp:** $(date)
 
-**Workflow Run ID:** ${{ github.run_id }}  
-**Status:** {status_emoji} {execution_status}  
-**Mode:** ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}  
-**Contacts Processed:** ${{ needs.validate-and-prepare.outputs.contact_count }}  
-**Templates Available:** ${{ needs.validate-and-prepare.outputs.domain_campaigns }}  
-**Target Domain:** ${{ github.event.inputs.target_domain or 'All domains' }}  
-**Timestamp:** $(date)
+          ## Integration Status
+          ✅ **Successfully integrated with YOUR existing scripts:**
+          - email_campaign_system.py (main processor)
+          - email_sender.py (email delivery)
+          - email_feedback_injector.py (feedback system)
+          - reply_tracker.py (real-time tracking)
+          - docx_feedback_processor.py (template processing)
 
-## Integration Status
-✅ **Successfully integrated with YOUR existing scripts:**
-- email_campaign_system.py (main processor)
-- email_sender.py (email delivery)
-- email_feedback_injector.py (feedback system)
-- reply_tracker.py (real-time tracking)
-- docx_feedback_processor.py (template processing)
+          ## Configuration
+          - **Batch Size:** ${{ github.event.inputs.batch_size or 50 }}
+          - **Real-time Tracking:** ${{ github.event.inputs.enable_real_time_tracking }}
+          - **Debug Mode:** ${{ github.event.inputs.debug_mode }}
+          - **Force Validation:** ${{ github.event.inputs.force_validation }}
 
-## Configuration
-- **Batch Size:** ${{ github.event.inputs.batch_size or 50 }}
-- **Real-time Tracking:** ${{ github.event.inputs.enable_real_time_tracking }}
-- **Debug Mode:** ${{ github.event.inputs.debug_mode }}
-- **Force Validation:** ${{ github.event.inputs.force_validation }}
+          ## Artifacts
+          View full results and logs in GitHub Actions artifacts for run ${{ github.run_id }}.
 
-## Artifacts
-View full results and logs in GitHub Actions artifacts for run ${{ github.run_id }}.
+          ## Next Steps
+          Based on execution status:
+            ''' + ('- Review successful execution metrics\\n- Consider scaling up campaigns\\n- Analyze feedback responses' if execution_status == '0' else '- Check execution logs for errors\\n- Validate configuration and credentials\\n- Review script imports and dependencies') + f'''
 
-## Next Steps
-Based on execution status:
-''' + ('- Review successful execution metrics\\n- Consider scaling up campaigns\\n- Analyze feedback responses' if execution_status == '0' else '- Check execution logs for errors\\n- Validate configuration and credentials\\n- Review script imports and dependencies') + f'''
+          ---
+          *Automated notification from production email campaign workflow*  
+          *Using YOUR existing scripts with full integration*  
+          *Generated: $(date)*
+          '''
 
----
-*Automated notification from production email campaign workflow*  
-*Using YOUR existing scripts with full integration*  
-*Generated: $(date)*
-'''
-
-try:
-    headers = {
-        'Authorization': f'token {github_token}',
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'GitHub-Actions-Campaign-Workflow'
-    }
+          try:
+            headers = {
+            'Authorization': f'token {github_token}',
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'GitHub-Actions-Campaign-Workflow'
+            }
     
-    data = {
-        'title': title,
-        'body': body,
-        'labels': ['campaign-report', 'automated', 'production']
-    }
+          data = {
+          'title': title,
+          'body': body,
+          'labels': ['campaign-report', 'automated', 'production']
+          }
     
-    response = requests.post(
-        f'https://api.github.com/repos/{repo}/issues',
-        headers=headers,
-        data=json.dumps(data),
-        timeout=30
-    )
+          response = requests.post(
+          f'https://api.github.com/repos/{repo}/issues',
+          headers=headers,
+          data=json.dumps(data),
+          timeout=30
+          )
     
-    if response.status_code == 201:
-        issue_data = response.json()
-        print(f'✅ Created issue #{issue_data[\"number\"]}: {title}')
-        print(f'Issue URL: {issue_data[\"html_url\"]}')
-    else:
-        print(f'❌ Failed to create issue: {response.status_code}')
-        print(f'Response: {response.text[:500]}')
+          if response.status_code == 201:
+            issue_data = response.json()
+            print(f'✅ Created issue #{issue_data[\"number\"]}: {title}')
+            print(f'Issue URL: {issue_data[\"html_url\"]}')
+          else:
+            print(f'❌ Failed to create issue: {response.status_code}')
+            print(f'Response: {response.text[:500]}')
         
-except Exception as e:
-    print(f'❌ Error creating GitHub issue: {e}')
-"
+          except Exception as e:
+            print(f'❌ Error creating GitHub issue: {e}') """
 
       - name: Upload comprehensive campaign artifacts
         uses: actions/upload-artifact@v4
