@@ -5,7 +5,10 @@ import traceback
 import json
 import csv
 import re
+import urllib.request
+import urllib.error
 from datetime import datetime
+from pathlib import Path
 
 # Environment detection and library availability checks
 IS_REMOTE = os.getenv('GITHUB_ACTIONS') is not None or os.getenv('CI') is not None
@@ -72,20 +75,144 @@ except ImportError:
             print(f"Body: {body[:200]}...")
 
 
-def load_contacts_from_file(contacts_file):
-    """Load contacts from a JSON file (created by integrated_runner)"""
+def load_google_sheets_contacts(url_file_path):
+    """Load contacts from Google Sheets URL file"""
+    contacts = []
     try:
-        if os.path.exists(contacts_file):
-            with open(contacts_file, 'r', encoding='utf-8') as f:
-                contacts = json.load(f)
-            print(f"Loaded {len(contacts)} contacts from {contacts_file}")
+        with open(url_file_path, 'r') as f:
+            sheets_url = f.read().strip()
+        
+        if not sheets_url or 'docs.google.com/spreadsheets' not in sheets_url:
+            print(f"Invalid Google Sheets URL in {url_file_path}")
             return contacts
-        else:
-            print(f"Warning: Contact file not found: {contacts_file}")
-            return []
+        
+        # Extract sheet ID and construct CSV export URL
+        sheet_id_match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheets_url)
+        if sheet_id_match:
+            sheet_id = sheet_id_match.group(1)
+            csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=0"
+            
+            print(f"Fetching contacts from Google Sheets: {csv_url}")
+            
+            try:
+                with urllib.request.urlopen(csv_url, timeout=30) as response:
+                    csv_data = response.read().decode('utf-8')
+                
+                # Parse CSV
+                csv_reader = csv.DictReader(csv_data.splitlines())
+                for row in csv_reader:
+                    contact = {}
+                    for key, value in row.items():
+                        if key and value:
+                            clean_key = key.strip().lower()
+                            clean_value = value.strip()
+                            
+                            if clean_key in ['email', 'email_address']:
+                                contact['email'] = clean_value
+                            elif clean_key in ['name', 'full_name']:
+                                contact['name'] = clean_value
+                            elif clean_key in ['company', 'organization']:
+                                contact['company'] = clean_value
+                            else:
+                                contact[clean_key] = clean_value
+                    
+                    if contact.get('email') and '@' in contact['email']:
+                        contacts.append(contact)
+                
+                print(f"Loaded {len(contacts)} contacts from Google Sheets")
+                
+            except urllib.error.HTTPError as e:
+                if e.code == 403:
+                    print(f"Access denied to Google Sheets. Check sharing settings.")
+                else:
+                    print(f"HTTP error accessing Google Sheets: {e}")
+            except Exception as e:
+                print(f"Error fetching Google Sheets data: {e}")
+    
     except Exception as e:
-        print(f"Error loading contacts from {contacts_file}: {str(e)}")
-        return []
+        print(f"Error loading Google Sheets contacts from {url_file_path}: {e}")
+    
+    return contacts
+
+
+def load_csv_contacts(csv_file_path):
+    """Load contacts from CSV file"""
+    contacts = []
+    try:
+        with open(csv_file_path, 'r', newline='', encoding='utf-8') as csvfile:
+            # Auto-detect dialect
+            sample = csvfile.read(1024)
+            csvfile.seek(0)
+            try:
+                sniffer = csv.Sniffer()
+                dialect = sniffer.sniff(sample)
+                reader = csv.DictReader(csvfile, dialect=dialect)
+            except:
+                reader = csv.DictReader(csvfile)
+            
+            for row in reader:
+                contact = {}
+                for key, value in row.items():
+                    if key and value:
+                        clean_key = key.strip().lower()
+                        clean_value = value.strip()
+                        
+                        if clean_key in ['email', 'email_address']:
+                            contact['email'] = clean_value
+                        elif clean_key in ['name', 'full_name']:
+                            contact['name'] = clean_value
+                        elif clean_key in ['company', 'organization']:
+                            contact['company'] = clean_value
+                        else:
+                            contact[clean_key] = clean_value
+                
+                if contact.get('email') and '@' in contact['email']:
+                    contacts.append(contact)
+        
+        print(f"Loaded {len(contacts)} contacts from CSV: {csv_file_path}")
+    
+    except Exception as e:
+        print(f"Error loading CSV contacts from {csv_file_path}: {e}")
+    
+    return contacts
+
+
+def load_contacts_from_directory(contacts_dir):
+    """Load contacts from directory containing various file types"""
+    all_contacts = []
+    contacts_path = Path(contacts_dir)
+    
+    if not contacts_path.exists():
+        print(f"Contacts directory not found: {contacts_dir}")
+        return all_contacts
+    
+    # Load Google Sheets contacts (.url files)
+    url_files = list(contacts_path.glob('*.url'))
+    print(f"Found {len(url_files)} Google Sheets URL files")
+    
+    for url_file in url_files:
+        contacts = load_google_sheets_contacts(url_file)
+        all_contacts.extend(contacts)
+    
+    # Load CSV contacts
+    csv_files = list(contacts_path.glob('*.csv'))
+    print(f"Found {len(csv_files)} CSV files")
+    
+    for csv_file in csv_files:
+        contacts = load_csv_contacts(csv_file)
+        all_contacts.extend(contacts)
+    
+    # Remove duplicates based on email
+    unique_contacts = {}
+    for contact in all_contacts:
+        email = contact.get('email', '').lower()
+        if email and email not in unique_contacts:
+            unique_contacts[email] = contact
+    
+    final_contacts = list(unique_contacts.values())
+    print(f"Total unique contacts loaded: {len(final_contacts)}")
+    
+    return final_contacts
 
 
 def load_campaign_content(campaign_path):
@@ -182,24 +309,6 @@ def load_json_campaign(campaign_path):
                 'metadata': {}
             }
         
-        # Format 4: Template-based (if you use templates)
-        elif 'template' in campaign_data:
-            template_path = os.path.join('campaign-templates', campaign_data['template'])
-            if os.path.exists(template_path):
-                template_content = load_campaign_content(template_path)
-                if template_content:
-                    # Replace template variables
-                    for key, value in campaign_data.get('variables', {}).items():
-                        template_content = template_content.replace(f'{{{{{key}}}}}', str(value))
-                    
-                    return {
-                        'subject': campaign_data.get('subject', 'Campaign'),
-                        'content': template_content,
-                        'from_name': campaign_data.get('from_name', 'Campaign System'),
-                        'content_type': campaign_data.get('content_type', 'html'),
-                        'metadata': campaign_data.get('metadata', {})
-                    }
-        
         print(f"Warning: Unknown JSON campaign format in {campaign_path}")
         return None
         
@@ -260,11 +369,10 @@ Campaign Details:
         print(f"Warning: Could not send summary alert: {e}")
 
 
-def campaign_main(templates_root, contacts_root, scheduled_root, tracking_root, alerts_email, dry_run=False):
-    """Main campaign execution function - now uses pre-loaded contacts"""
+def campaign_main(contacts_root, scheduled_root, tracking_root, alerts_email, dry_run=False, **kwargs):
+    """Main campaign execution function - now loads contacts directly"""
     try:
         print(f"Starting campaign_main with dry_run={dry_run}")
-        print(f"Templates: {templates_root}")
         print(f"Contacts: {contacts_root}")
         print(f"Scheduled: {scheduled_root}")
         print(f"Tracking: {tracking_root}")
@@ -273,15 +381,20 @@ def campaign_main(templates_root, contacts_root, scheduled_root, tracking_root, 
         os.makedirs(tracking_root, exist_ok=True)
         print("Created tracking directory")
         
-        # Load contacts from pre-generated file (created by integrated_runner)
-        contacts_file = os.path.join(tracking_root, 'loaded_contacts.json')
-        all_contacts = load_contacts_from_file(contacts_file)
+        # Load contacts directly from contacts directory
+        all_contacts = load_contacts_from_directory(contacts_root)
         
         if not all_contacts:
             print("Warning: No contacts found. Campaign will not send emails.")
             # Don't return here - let the system generate logs for summary
         else:
             print(f"Total contacts loaded: {len(all_contacts)}")
+        
+        # Save loaded contacts for tracking
+        contacts_file = os.path.join(tracking_root, 'loaded_contacts.json')
+        with open(contacts_file, 'w') as f:
+            json.dump(all_contacts, f, indent=2)
+        print(f"Contacts saved to: {contacts_file}")
         
         # Initialize enhanced email sender
         emailer = EmailSender(alerts_email=alerts_email, dry_run=dry_run)
@@ -456,12 +569,18 @@ if __name__ == "__main__":
     print(f"Available libraries: pandas={PANDAS_AVAILABLE}, docx={DOCX_AVAILABLE}, requests={REQUESTS_AVAILABLE}, email_sender={EMAIL_SENDER_AVAILABLE}")
     
     parser = argparse.ArgumentParser(description='Email Campaign System - Fixed Integration')
-    parser.add_argument("--templates", required=True, help="Templates directory path")
+    # Updated to match your workflow's expected arguments
     parser.add_argument("--contacts", required=True, help="Contacts directory path")
     parser.add_argument("--scheduled", required=True, help="Scheduled campaigns directory path")
     parser.add_argument("--tracking", required=True, help="Tracking directory path")
     parser.add_argument("--alerts", required=True, help="Alerts email address")
+    parser.add_argument("--feedback", help="Feedback email address")
+    parser.add_argument("--templates", help="Templates directory path")
+    parser.add_argument("--domain", help="Target specific domain")
+    parser.add_argument("--filter-domain", help="Filter campaigns by domain pattern")
     parser.add_argument("--dry-run", action="store_true", help="Print emails instead of sending")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument("--no-feedback", action="store_true", help="Skip feedback injection")
     parser.add_argument("--remote-only", action="store_true", help="Force remote-only mode")
     
     print("Parsing arguments...")
@@ -473,21 +592,24 @@ if __name__ == "__main__":
         print("Forced remote-only mode enabled")
     
     print(f"Arguments parsed successfully:")
-    print(f"  --templates: {args.templates}")
     print(f"  --contacts: {args.contacts}")
     print(f"  --scheduled: {args.scheduled}")
     print(f"  --tracking: {args.tracking}")
     print(f"  --alerts: {args.alerts}")
+    print(f"  --feedback: {args.feedback}")
     print(f"  --dry-run: {args.dry_run}")
     print(f"  --remote-only: {args.remote_only}")
     
     print("Calling campaign_main...")
     campaign_main(
-        args.templates, 
-        args.contacts, 
-        args.scheduled, 
-        args.tracking, 
-        args.alerts,
-        dry_run=args.dry_run
+        contacts_root=args.contacts,
+        scheduled_root=args.scheduled, 
+        tracking_root=args.tracking, 
+        alerts_email=args.alerts,
+        dry_run=args.dry_run,
+        feedback_email=args.feedback,
+        target_domain=args.domain,
+        campaign_filter=args.filter_domain,
+        debug=args.debug
     )
     print("Script completed successfully")
