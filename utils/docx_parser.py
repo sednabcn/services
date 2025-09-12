@@ -19,163 +19,6 @@ except ImportError:
     GITHUB_ACTIONS_EMAIL_AVAILABLE = False
     print("GitHub Actions email sender not available - using standard EmailSender")
 
-# Modify your campaign_main function - replace this section:
-
-def campaign_main(contacts_root, scheduled_root, tracking_root, alerts_email, dry_run=False, **kwargs):
-    """Main campaign execution function - integrated with GitHub Actions SMTP bypass"""
-    try:
-        print(f"Starting campaign with GitHub Actions SMTP bypass support")
-        print(f"GitHub Actions detected: {os.getenv('GITHUB_ACTIONS') is not None}")
-        print(f"Contacts: {contacts_root}")
-        print(f"Scheduled: {scheduled_root}")
-        print(f"Tracking: {tracking_root}")
-        print(f"Alerts: {alerts_email}")
-        
-        os.makedirs(tracking_root, exist_ok=True)
-        
-        # Load contacts using your existing logic
-        if DATA_LOADER_AVAILABLE:
-            print("Using professional data_loader module")
-            all_contacts = load_contacts_directory(contacts_root)
-            if all_contacts:
-                stats = validate_contact_data(all_contacts)
-                print(f"Contact validation stats:")
-                print(f"  Total: {stats['total_contacts']}")
-                print(f"  Valid emails: {stats['valid_emails']}")
-        else:
-            print("Using fallback contact loading")
-            all_contacts = fallback_load_contacts_from_directory(contacts_root)
-        
-        # Initialize EmailSender with GitHub Actions support
-        if GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS'):
-            print("Using GitHubActionsEmailSender - SMTP timeouts bypassed")
-            emailer = GitHubActionsEmailSender(
-                smtp_host=os.getenv('SMTP_HOST'),
-                smtp_port=os.getenv('SMTP_PORT'),
-                smtp_user=os.getenv('SMTP_USER'),
-                smtp_pass=os.getenv('SMTP_PASS'),
-                alerts_email=alerts_email,
-                dry_run=dry_run
-            )
-        else:
-            print("Using standard EmailSender")
-            emailer = EmailSender(alerts_email=alerts_email, dry_run=dry_run)
-        
-        # Your existing campaign processing logic continues here...
-        campaigns_processed = 0
-        total_emails_sent = 0
-        total_failures = 0
-        campaign_results = []
-        
-        log_file = "dryrun.log" if dry_run else "campaign_execution.log"
-        with open(log_file, 'w') as f:
-            f.write(f"Campaign log started - GitHub Actions mode: {os.getenv('GITHUB_ACTIONS') is not None}\n")
-            f.write(f"SMTP bypass: {GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS') is not None}\n")
-            f.write(f"Total contacts loaded: {len(all_contacts)}\n")
-            f.write(f"Timestamp: {datetime.now().isoformat()}\n\n")
-        
-        # Process campaigns (your existing logic)
-        if not os.path.exists(scheduled_root):
-            print(f"ERROR: Scheduled campaigns directory does not exist: {scheduled_root}")
-            return
-        
-        campaign_files = [f for f in os.listdir(scheduled_root) 
-                         if f.endswith(('.docx', '.txt', '.html', '.md', '.json'))]
-        
-        if not campaign_files:
-            print("ERROR: No campaign files found")
-            return
-        
-        print(f"Found {len(campaign_files)} campaign files to process")
-        
-        # Process each campaign
-        for campaign_file in campaign_files:
-            campaign_name = os.path.splitext(campaign_file)[0]
-            campaign_path = os.path.join(scheduled_root, campaign_file)
-            
-            print(f"\n--- Processing Campaign: {campaign_name} ---")
-            
-            campaign_content = load_campaign_content(campaign_path)
-            if not campaign_content:
-                print(f"Warning: Could not load content for {campaign_file}")
-                continue
-            
-            # Handle content types
-            if isinstance(campaign_content, dict):
-                subject = campaign_content.get('subject', f"Campaign: {campaign_name}")
-                content = campaign_content.get('content', '')
-                from_name = campaign_content.get('from_name', 'Campaign System')
-            else:
-                subject = extract_subject_from_content(campaign_content) or f"Campaign: {campaign_name}"
-                content = str(campaign_content)
-                from_name = "Campaign System"
-            
-            # Add recipient tracking
-            contacts_with_ids = []
-            for i, contact in enumerate(all_contacts):
-                contact_copy = contact.copy()
-                contact_copy['recipient_id'] = f"{campaign_name}_{i+1}"
-                contact_copy['campaign_id'] = campaign_name
-                contacts_with_ids.append(contact_copy)
-            
-            # Send campaign (will use GitHub Actions emailer if available)
-            try:
-                campaign_result = emailer.send_campaign(
-                    campaign_name=campaign_name,
-                    subject=subject,
-                    content=content,
-                    recipients=contacts_with_ids,
-                    from_name=from_name
-                )
-                
-                campaigns_processed += 1
-                total_emails_sent += campaign_result['sent']
-                total_failures += campaign_result['failed']
-                campaign_results.append(campaign_result)
-                
-                # Enhanced logging
-                with open(log_file, 'a') as f:
-                    f.write(f"Campaign: {campaign_name}\n")
-                    f.write(f"Recipients: {campaign_result['total_recipients']}\n")
-                    f.write(f"Sent: {campaign_result['sent']}\n")
-                    f.write(f"Failed: {campaign_result['failed']}\n")
-                    f.write(f"GitHub Actions mode: {os.getenv('GITHUB_ACTIONS') is not None}\n")
-                    f.write(f"SMTP bypass: {GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS') is not None}\n")
-                    f.write(f"Template processing: ENABLED\n\n")
-                
-            except Exception as e:
-                print(f"Error processing campaign '{campaign_name}': {str(e)}")
-                continue
-        
-        # Send summary using GitHub Actions emailer if available
-        if GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS'):
-            emailer.send_batch_summary(campaigns_processed, total_emails_sent, total_failures, campaign_results)
-            print("Campaign summary saved for GitHub Actions email delivery")
-        elif not dry_run and campaigns_processed > 0:
-            send_summary_alert(emailer, campaigns_processed, total_emails_sent, total_failures, campaign_results)
-        
-        # Final logging
-        with open(log_file, 'a') as f:
-            f.write("=== CAMPAIGN SUMMARY ===\n")
-            f.write(f"Campaigns processed: {campaigns_processed}\n")
-            f.write(f"Total emails: {total_emails_sent + total_failures}\n")
-            f.write(f"Successful: {total_emails_sent}\n")
-            f.write(f"Failed: {total_failures}\n")
-            f.write(f"GitHub Actions SMTP bypass: {GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS') is not None}\n")
-            f.write(f"Completed: {datetime.now().isoformat()}\n")
-        
-        print(f"\n=== FINAL SUMMARY ===")
-        print(f"Campaigns processed: {campaigns_processed}")
-        print(f"Mode: {'GitHub Actions SMTP Bypass' if os.getenv('GITHUB_ACTIONS') else 'Direct SMTP'}")
-        print(f"Template processing: ENABLED")
-        print("Campaign completed successfully")
-        
-    except Exception as e:
-        print(f"ERROR: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
 # Import the professional data loader
 try:
     from data_loader import load_contacts_directory, validate_contact_data
@@ -625,117 +468,85 @@ Campaign Details:
 
 
 def campaign_main(contacts_root, scheduled_root, tracking_root, alerts_email, dry_run=False, **kwargs):
-    """Main campaign execution function - integrated with professional data_loader"""
+    """Main campaign execution function - integrated with GitHub Actions SMTP bypass"""
     try:
-        print(f"Starting integrated campaign_main with dry_run={dry_run}")
+        print(f"Starting campaign with GitHub Actions SMTP bypass support")
+        print(f"GitHub Actions detected: {os.getenv('GITHUB_ACTIONS') is not None}")
         print(f"Contacts: {contacts_root}")
         print(f"Scheduled: {scheduled_root}")
         print(f"Tracking: {tracking_root}")
         print(f"Alerts: {alerts_email}")
-        print(f"Data Loader Available: {DATA_LOADER_AVAILABLE}")
         
         os.makedirs(tracking_root, exist_ok=True)
-        print("Created tracking directory")
         
-        # Load contacts using professional data_loader or fallback
+        # Load contacts using your existing logic
         if DATA_LOADER_AVAILABLE:
             print("Using professional data_loader module")
             all_contacts = load_contacts_directory(contacts_root)
-            
-            # Generate validation statistics
             if all_contacts:
                 stats = validate_contact_data(all_contacts)
                 print(f"Contact validation stats:")
                 print(f"  Total: {stats['total_contacts']}")
                 print(f"  Valid emails: {stats['valid_emails']}")
-                print(f"  Unique domains: {stats['unique_domains']}")
-                print(f"  Missing emails: {stats['missing_emails']}")
-                print(f"  Invalid emails: {len(stats['invalid_emails'])}")
         else:
             print("Using fallback contact loading")
             all_contacts = fallback_load_contacts_from_directory(contacts_root)
         
-        if not all_contacts:
-            print("Warning: No contacts found. Campaign will not send emails.")
+        # Initialize EmailSender with GitHub Actions support
+        if GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS'):
+            print("Using GitHubActionsEmailSender - SMTP timeouts bypassed")
+            emailer = GitHubActionsEmailSender(
+                smtp_host=os.getenv('SMTP_HOST'),
+                smtp_port=os.getenv('SMTP_PORT'),
+                smtp_user=os.getenv('SMTP_USER'),
+                smtp_pass=os.getenv('SMTP_PASS'),
+                alerts_email=alerts_email,
+                dry_run=dry_run
+            )
         else:
-            print(f"Total contacts loaded: {len(all_contacts)}")
+            print("Using standard EmailSender")
+            emailer = EmailSender(alerts_email=alerts_email, dry_run=dry_run)
         
-        # Save loaded contacts for tracking
-        contacts_file = os.path.join(tracking_root, 'loaded_contacts.json')
-        with open(contacts_file, 'w') as f:
-            json.dump(all_contacts, f, indent=2)
-        print(f"Contacts saved to: {contacts_file}")
-        
-        # Initialize enhanced email sender
-        emailer = EmailSender(alerts_email=alerts_email, dry_run=dry_run)
-        print("Enhanced EmailSender with template processing initialized")
-        
-        # Initialize log file
-        log_file = "dryrun.log" if dry_run else "campaign_execution.log"
-        with open(log_file, 'w') as f:
-            f.write(f"Campaign log started - Dry run: {dry_run}\n")
-            f.write(f"Total contacts loaded: {len(all_contacts)}\n")
-            f.write(f"Template processing: ENABLED\n")
-            f.write(f"Data loader module: {DATA_LOADER_AVAILABLE}\n")
-            f.write(f"Timestamp: {datetime.now().isoformat()}\n\n")
-        
-        # Process campaigns
+        # Your existing campaign processing logic continues here...
         campaigns_processed = 0
         total_emails_sent = 0
         total_failures = 0
         campaign_results = []
         
-        # Check scheduled campaigns directory with detailed logging
+        log_file = "dryrun.log" if dry_run else "campaign_execution.log"
+        with open(log_file, 'w') as f:
+            f.write(f"Campaign log started - GitHub Actions mode: {os.getenv('GITHUB_ACTIONS') is not None}\n")
+            f.write(f"SMTP bypass: {GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS') is not None}\n")
+            f.write(f"Total contacts loaded: {len(all_contacts)}\n")
+            f.write(f"Timestamp: {datetime.now().isoformat()}\n\n")
+        
+        # Process campaigns (your existing logic)
         if not os.path.exists(scheduled_root):
             print(f"ERROR: Scheduled campaigns directory does not exist: {scheduled_root}")
-            with open(log_file, 'a') as f:
-                f.write(f"ERROR: Scheduled campaigns directory not found: {scheduled_root}\n")
             return
         
-        print(f"Checking scheduled campaigns directory: {scheduled_root}")
-        print(f"Directory exists: {os.path.exists(scheduled_root)}")
-        print(f"Directory contents: {os.listdir(scheduled_root) if os.path.exists(scheduled_root) else 'N/A'}")
-        
-        # Get campaign files with detailed logging
-        all_files = os.listdir(scheduled_root)
-        print(f"All files in directory: {all_files}")
-        
-        campaign_files = [f for f in all_files 
+        campaign_files = [f for f in os.listdir(scheduled_root) 
                          if f.endswith(('.docx', '.txt', '.html', '.md', '.json'))]
         
-        print(f"Campaign files found: {campaign_files}")
-        
         if not campaign_files:
-            print("ERROR: No campaign files found in scheduled directory")
-            print(f"Looking for files with extensions: .docx, .txt, .html, .md, .json")
-            print(f"Files present: {all_files}")
-            with open(log_file, 'a') as f:
-                f.write("ERROR: No campaign files found in scheduled directory\n")
-                f.write(f"Files present: {all_files}\n")
-                f.write(f"Expected extensions: .docx, .txt, .html, .md, .json\n")
+            print("ERROR: No campaign files found")
             return
         
         print(f"Found {len(campaign_files)} campaign files to process")
         
-        # Process each campaign with template substitution
+        # Process each campaign
         for campaign_file in campaign_files:
             campaign_name = os.path.splitext(campaign_file)[0]
             campaign_path = os.path.join(scheduled_root, campaign_file)
             
             print(f"\n--- Processing Campaign: {campaign_name} ---")
-            print(f"File path: {campaign_path}")
-            print(f"File exists: {os.path.exists(campaign_path)}")
             
-            # Load campaign content
             campaign_content = load_campaign_content(campaign_path)
-            
             if not campaign_content:
                 print(f"Warning: Could not load content for {campaign_file}")
-                with open(log_file, 'a') as f:
-                    f.write(f"WARNING: Could not load content for {campaign_file}\n")
                 continue
             
-            # Handle different content types
+            # Handle content types
             if isinstance(campaign_content, dict):
                 subject = campaign_content.get('subject', f"Campaign: {campaign_name}")
                 content = campaign_content.get('content', '')
@@ -745,23 +556,15 @@ def campaign_main(contacts_root, scheduled_root, tracking_root, alerts_email, dr
                 content = str(campaign_content)
                 from_name = "Campaign System"
             
-            print(f"Campaign subject template: {subject}")
-            print(f"Content length: {len(content)} characters")
-            template_pattern = r'\{[^}]+\}|\{\{[^}]+\}\}'
-            print(f"Template variables detected: {len(re.findall(template_pattern, content))} in content")
-                      
-            # Add recipient IDs for tracking
-            if all_contacts:
-                contacts_with_ids = []
-                for i, contact in enumerate(all_contacts):
-                    contact_copy = contact.copy()
-                    contact_copy['recipient_id'] = f"{campaign_name}_{i+1}"
-                    contact_copy['campaign_id'] = campaign_name
-                    contacts_with_ids.append(contact_copy)
-            else:
-                contacts_with_ids = []
+            # Add recipient tracking
+            contacts_with_ids = []
+            for i, contact in enumerate(all_contacts):
+                contact_copy = contact.copy()
+                contact_copy['recipient_id'] = f"{campaign_name}_{i+1}"
+                contact_copy['campaign_id'] = campaign_name
+                contacts_with_ids.append(contact_copy)
             
-            # Send campaign with template processing
+            # Send campaign (will use GitHub Actions emailer if available)
             try:
                 campaign_result = emailer.send_campaign(
                     campaign_name=campaign_name,
@@ -776,87 +579,47 @@ def campaign_main(contacts_root, scheduled_root, tracking_root, alerts_email, dr
                 total_failures += campaign_result['failed']
                 campaign_results.append(campaign_result)
                 
-                # Enhanced logging with template processing info
+                # Enhanced logging
                 with open(log_file, 'a') as f:
                     f.write(f"Campaign: {campaign_name}\n")
                     f.write(f"Recipients: {campaign_result['total_recipients']}\n")
                     f.write(f"Sent: {campaign_result['sent']}\n")
                     f.write(f"Failed: {campaign_result['failed']}\n")
-                    f.write(f"Content source: {campaign_file}\n")
-                    f.write(f"Subject template: {subject}\n")
-                    f.write(f"Template processing: {'ENABLED' if campaign_result.get('template_substitution') else 'DISABLED'}\n")
-                    if dry_run:
-                        f.write("Status: SIMULATED - personalized content generated but no emails sent\n")
-                    else:
-                        f.write("Status: SENT with personalized content\n")
-                    f.write(f"Duration: {campaign_result.get('duration_seconds', 0):.2f}s\n")
-                    f.write("\n")
-                
-                print(f"Campaign '{campaign_name}' completed with template processing:")
-                print(f"   Sent: {campaign_result['sent']}")
-                print(f"   Failed: {campaign_result['failed']}")
-                print(f"   Template substitution: {'ENABLED' if campaign_result.get('template_substitution') else 'DISABLED'}")
+                    f.write(f"GitHub Actions mode: {os.getenv('GITHUB_ACTIONS') is not None}\n")
+                    f.write(f"SMTP bypass: {GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS') is not None}\n")
+                    f.write(f"Template processing: ENABLED\n\n")
                 
             except Exception as e:
                 print(f"Error processing campaign '{campaign_name}': {str(e)}")
-                traceback.print_exc()
-                with open(log_file, 'a') as f:
-                    f.write(f"Campaign: {campaign_name}\n")
-                    f.write(f"Status: ERROR - {str(e)}\n\n")
                 continue
         
-        # Final summary with template processing stats
-        with open(log_file, 'a') as f:
-            f.write("=== ENHANCED CAMPAIGN SUMMARY ===\n")
-            f.write(f"Total campaigns processed: {campaigns_processed}\n")
-            f.write(f"Total emails sent: {total_emails_sent}\n")
-            f.write(f"Total failures: {total_failures}\n")
-            f.write(f"Template processing: ENABLED\n")
-            f.write(f"Data loader module: {DATA_LOADER_AVAILABLE}\n")
-            if total_emails_sent + total_failures > 0:
-                success_rate = (total_emails_sent / (total_emails_sent + total_failures)) * 100
-                f.write(f"Success rate: {success_rate:.1f}%\n")
-            f.write(f"Run mode: {'DRY-RUN' if dry_run else 'LIVE'}\n")
-            f.write(f"Completed: {datetime.now().isoformat()}\n")
-            f.write("Script completed successfully\n")
-        
-        print(f"\n=== ENHANCED FINAL SUMMARY ===")
-        print(f"Campaigns processed: {campaigns_processed}")
-        print(f"Total emails: {total_emails_sent + total_failures}")
-        print(f"Successful: {total_emails_sent}")
-        print(f"Failed: {total_failures}")
-        print(f"Template processing: ENABLED")
-        if total_emails_sent + total_failures > 0:
-            success_rate = (total_emails_sent / (total_emails_sent + total_failures)) * 100
-            print(f"Success rate: {success_rate:.1f}%")
-        print(f"Mode: {'DRY-RUN' if dry_run else 'LIVE'}")
-        print("Script completed successfully")
-        
-        # Send summary alert
-        if not dry_run and campaigns_processed > 0 and EMAIL_SENDER_AVAILABLE:
+        # Send summary using GitHub Actions emailer if available
+        if GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS'):
+            emailer.send_batch_summary(campaigns_processed, total_emails_sent, total_failures, campaign_results)
+            print("Campaign summary saved for GitHub Actions email delivery")
+        elif not dry_run and campaigns_processed > 0:
             send_summary_alert(emailer, campaigns_processed, total_emails_sent, total_failures, campaign_results)
+        
+        # Final logging
+        with open(log_file, 'a') as f:
+            f.write("=== CAMPAIGN SUMMARY ===\n")
+            f.write(f"Campaigns processed: {campaigns_processed}\n")
+            f.write(f"Total emails: {total_emails_sent + total_failures}\n")
+            f.write(f"Successful: {total_emails_sent}\n")
+            f.write(f"Failed: {total_failures}\n")
+            f.write(f"GitHub Actions SMTP bypass: {GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS') is not None}\n")
+            f.write(f"Completed: {datetime.now().isoformat()}\n")
+        
+        print(f"\n=== FINAL SUMMARY ===")
+        print(f"Campaigns processed: {campaigns_processed}")
+        print(f"Mode: {'GitHub Actions SMTP Bypass' if os.getenv('GITHUB_ACTIONS') else 'Direct SMTP'}")
+        print(f"Template processing: ENABLED")
+        print("Campaign completed successfully")
         
     except Exception as e:
         print(f"ERROR: {str(e)}")
+        import traceback
         traceback.print_exc()
-        
-        # Log error
-        error_log = "error.log"
-        with open(error_log, 'w') as f:
-            f.write(f"ERROR: {str(e)}\n")
-            f.write(traceback.format_exc())
-        
-        # Send error alert
-        try:
-            if not dry_run and EMAIL_SENDER_AVAILABLE:
-                emailer = EmailSender(alerts_email=alerts_email, dry_run=False)
-                emailer.send_alert(
-                    "Campaign System Error",
-                    f"Campaign execution failed with error:\n\n{str(e)}\n\nCheck logs for details."
-                )
-        except:
-            pass
-        
         sys.exit(1)
 
 

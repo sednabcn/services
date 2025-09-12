@@ -219,7 +219,7 @@ jobs:
           fi
           
           # Check feedback system scripts
-          feedback_scripts=("email_feedback_injector.py" "docx_feedback_processor.py" "reply_tracker.py")
+          feedback_scripts=("utils/email_feedback_injector.py" "utils/docx_feedback_processor.py" "utils/reply_tracker.py")
           feedback_available=0
           
           for script in "${feedback_scripts[@]}"; do
