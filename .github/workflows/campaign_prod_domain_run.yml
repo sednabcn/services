@@ -313,98 +313,98 @@ jobs:
           
           # Create contact analysis script to avoid indentation issues
           cat > analyze_contacts.py << 'EOF'
-import sys
-import os
-import json
-from datetime import datetime
-import glob
+          import sys
+          import os
+          import json
+          from datetime import datetime
+          import glob
 
-sys.path.append('.')
-sys.path.append('utils')
+          sys.path.append('.')
+          sys.path.append('utils')
 
-contact_count = 0
-analysis = {
-    'total_contacts': 0,
-    'sources_breakdown': {},
-    'domain_breakdown': {},
-    'contact_types': {},
-    'top_domains': [],
-    'sample_contacts': [],
-    'loaded_with': 'enhanced_system',
-    'analysis_timestamp': datetime.now().isoformat(),
-    'contact_source_filter': os.environ.get('CONTACT_SOURCE', 'all_sources')
-}
+          contact_count = 0
+          analysis = {
+          'total_contacts': 0,
+          'sources_breakdown': {},
+          'domain_breakdown': {},
+          'contact_types': {},
+          'top_domains': [],
+          'sample_contacts': [],
+          'loaded_with': 'enhanced_system',
+          'analysis_timestamp': datetime.now().isoformat(),
+          'contact_source_filter': os.environ.get('CONTACT_SOURCE', 'all_sources')
+          }
 
-try:
-    # Try using professional data_loader if available
-    try:
-        from utils.data_loader import load_contacts
-        print('Using professional data_loader.py')
-        contacts = load_contacts(os.environ.get('CONTACTS_DIR', 'contacts'))
-        analysis['loaded_with'] = 'professional_data_loader.py'
-    except ImportError:
-        print('Professional data_loader not available, using enhanced fallback')
-        # Enhanced fallback contact loading
-        import pandas as pd
+          try:
+             # Try using professional data_loader if available
+             try:
+               from utils.data_loader import load_contacts
+               print('Using professional data_loader.py')
+               contacts = load_contacts(os.environ.get('CONTACTS_DIR', 'contacts'))
+                analysis['loaded_with'] = 'professional_data_loader.py'
+             except ImportError:
+               print('Professional data_loader not available, using enhanced fallback')
+              # Enhanced fallback contact loading
+              import pandas as pd
         
-        contacts = []
-        contacts_dir = os.environ.get('CONTACTS_DIR', 'contacts')
+              contacts = []
+              contacts_dir = os.environ.get('CONTACTS_DIR', 'contacts')
         
-        # Load CSV files
-        csv_files = glob.glob(os.path.join(contacts_dir, '*.csv'))
-        for csv_file in csv_files:
-            try:
-                df = pd.read_csv(csv_file)
-                for _, row in df.iterrows():
-                    contact = row.to_dict()
-                    contact['source'] = os.path.basename(csv_file)
-                    contact['source_type'] = 'csv'
-                    contacts.append(contact)
-            except Exception as e:
-                print(f'Error loading CSV {csv_file}: {e}')
+              # Load CSV files
+              csv_files = glob.glob(os.path.join(contacts_dir, '*.csv'))
+              for csv_file in csv_files:
+                try:
+                  df = pd.read_csv(csv_file)
+                  for _, row in df.iterrows():
+                     contact = row.to_dict()
+                     contact['source'] = os.path.basename(csv_file)
+                     contact['source_type'] = 'csv'
+                     contacts.append(contact)
+                except Exception as e:
+                  print(f'Error loading CSV {csv_file}: {e}')
         
-        analysis['loaded_with'] = 'enhanced_fallback_loader'
+                  analysis['loaded_with'] = 'enhanced_fallback_loader'
 
-    contact_count = len(contacts)
-    print(f'Successfully loaded {contact_count} contacts using {analysis["loaded_with"]}')
+                  contact_count = len(contacts)
+                  print(f'Successfully loaded {contact_count} contacts using {analysis["loaded_with"]}')
     
-    if contacts:
-        # Analyze sources
-        sources = {}
-        domains = {}
+                  if contacts:
+                    # Analyze sources
+                    sources = {}
+                    domains = {}
         
-        for contact in contacts:
-            # Source analysis
-            source = contact.get('source', 'unknown')
-            sources[source] = sources.get(source, 0) + 1
-     
-            # Domain analysis
-            email = str(contact.get('email', '')).lower()
-            if '@' in email:
-                domain = email.split('@')[-1]
-                domains[domain] = domains.get(domain, 0) + 1
+                    for contact in contacts:
+                      # Source analysis
+                      source = contact.get('source', 'unknown')
+                      sources[source] = sources.get(source, 0) + 1
+                     
+                      # Domain analysis
+                      email = str(contact.get('email', '')).lower()
+                      if '@' in email:
+                        domain = email.split('@')[-1]
+                        domains[domain] = domains.get(domain, 0) + 1
     
-        analysis.update({
-            'total_contacts': contact_count,
-            'sources_breakdown': sources,
-            'domain_breakdown': domains,
-            'top_domains': sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10],
-            'sample_contacts': contacts[:3] if contacts else []
-        })
+                        analysis.update({
+                        'total_contacts': contact_count,
+                        'sources_breakdown': sources,
+                        'domain_breakdown': domains,
+                        'top_domains': sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10],
+                        'sample_contacts': contacts[:3] if contacts else []
+                        })
 
-except Exception as e:
-    print(f'Error in contact analysis: {e}')
-    analysis['error'] = str(e)
+          except Exception as e:
+            print(f'Error in contact analysis: {e}')
+            analysis['error'] = str(e)
 
-with open('contact_analysis.json', 'w') as f:
-    json.dump(analysis, f, indent=2, default=str)
+          with open('contact_analysis.json', 'w') as f:
+            json.dump(analysis, f, indent=2, default=str)
 
-with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-    f.write(f'count={contact_count}\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f'count={contact_count}\n')
 
-if contact_count == 0:
-    print('::warning::No contacts loaded - check contact directory and files')
-EOF
+          if contact_count == 0:
+            print('::warning::No contacts loaded - check contact directory and files')
+            EOF
 
           export CONTACTS_DIR="$CONTACTS_DIR"
           export CONTACT_SOURCE="${{ github.event.inputs.contact_source }}"
@@ -421,66 +421,66 @@ EOF
           
           # Create template analysis script
           cat > analyze_templates.py << 'EOF'
-import sys
-import json
-import os
-from pathlib import Path
-from datetime import datetime
+          import sys
+          import json
+          import os
+          from pathlib import Path
+          from datetime import datetime
 
-# Enhanced template analysis
-domains = ['education', 'finance', 'healthcare', 'industry', 'technology', 'government']
-domain_stats = {}
-total_templates = 0
+          # Enhanced template analysis
+          domains = ['education', 'finance', 'healthcare', 'industry', 'technology', 'government']
+          domain_stats = {}
+          total_templates = 0
+          
+          templates_dir = Path(os.environ.get('TEMPLATES_DIR', 'campaign-templates'))
+          scheduled_dir = Path(os.environ.get('SCHEDULED_DIR', 'scheduled-campaigns'))
 
-templates_dir = Path(os.environ.get('TEMPLATES_DIR', 'campaign-templates'))
-scheduled_dir = Path(os.environ.get('SCHEDULED_DIR', 'scheduled-campaigns'))
+          print('Analyzing enhanced template structure...')
 
-print('Analyzing enhanced template structure...')
+          # Check domain-based structure
+          for domain in domains:
+            domain_path = templates_dir / domain
+            if domain_path.exists():
+              # Enhanced file type detection
+              docx_files = list(domain_path.glob('*.docx'))
+              all_templates = docx_files
+              
+              domain_stats[domain] = {
+              'template_count': len(all_templates),
+              'templates': [t.name for t in all_templates]
+              }
+              total_templates += len(all_templates)
+              print(f'  - {domain}: {len(all_templates)} templates')
+            else:
+              domain_stats[domain] = {
+              'template_count': 0,
+              'templates': []
+               }
+        
+          # Enhanced scheduled campaign analysis
+          scheduled_campaigns = 0
+          if scheduled_dir.exists():
+            for ext in ['*.txt', '*.docx']:
+              files = list(scheduled_dir.glob(ext))
+              scheduled_campaigns += len(files)
 
-# Check domain-based structure
-for domain in domains:
-    domain_path = templates_dir / domain
-    if domain_path.exists():
-        # Enhanced file type detection
-        docx_files = list(domain_path.glob('*.docx'))
-        all_templates = docx_files
+              # Create enhanced analysis
+              domain_analysis = {
+              'domain_count': len([d for d in domain_stats.values() if d['template_count'] > 0]),
+              'template_count': total_templates,
+              'scheduled_campaigns': scheduled_campaigns,
+              'domains': domain_stats,
+              'analysis_timestamp': datetime.now().isoformat(),
+              }
 
-        domain_stats[domain] = {
-            'template_count': len(all_templates),
-            'templates': [t.name for t in all_templates]
-        }
-        total_templates += len(all_templates)
-        print(f'  - {domain}: {len(all_templates)} templates')
-    else:
-        domain_stats[domain] = {
-            'template_count': 0,
-            'templates': []
-        }
+              with open('domain_analysis.json', 'w') as f:
+                json.dump(domain_analysis, f, indent=2)
 
-# Enhanced scheduled campaign analysis
-scheduled_campaigns = 0
-if scheduled_dir.exists():
-    for ext in ['*.txt', '*.docx']:
-        files = list(scheduled_dir.glob(ext))
-        scheduled_campaigns += len(files)
+               with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                 f.write(f'campaigns={total_templates}\n')
 
-# Create enhanced analysis
-domain_analysis = {
-    'domain_count': len([d for d in domain_stats.values() if d['template_count'] > 0]),
-    'template_count': total_templates,
-    'scheduled_campaigns': scheduled_campaigns,
-    'domains': domain_stats,
-    'analysis_timestamp': datetime.now().isoformat(),
-}
-
-with open('domain_analysis.json', 'w') as f:
-    json.dump(domain_analysis, f, indent=2)
-
-with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-    f.write(f'campaigns={total_templates}\n')
-
-print(f'Enhanced template analysis completed: {total_templates} templates, {scheduled_campaigns} scheduled campaigns')
-EOF
+                 print(f'Enhanced template analysis completed: {total_templates} templates, {scheduled_campaigns} scheduled campaigns')
+                 EOF
 
           export TEMPLATES_DIR="$TEMPLATES_DIR"
           export SCHEDULED_DIR="$SCHEDULED_DIR"
@@ -498,43 +498,43 @@ EOF
           
           # Create comprehensive test CSV file
           cat > "$CONTACTS_DIR/enhanced_test_contacts.csv" << 'EOF'
-name,email,organization,role,domain,country
-John Doe,john.doe@example.com,Example Corp,Manager,education,US
-Jane Smith,jane.smith@test.org,Test Organization,Director,healthcare,UK
-Bob Johnson,bob.johnson@sample.net,Sample Company,Analyst,finance,CA
-Alice Brown,alice.brown@demo.edu,Demo University,Professor,education,US
-Charlie Wilson,charlie.wilson@tech.co,Tech Solutions,CTO,technology,DE
-EOF
+          name,email,organization,role,domain,country
+          John Doe,john.doe@example.com,Example Corp,Manager,education,US
+          Jane Smith,jane.smith@test.org,Test Organization,Director,healthcare,UK
+          Bob Johnson,bob.johnson@sample.net,Sample Company,Analyst,finance,CA
+          Alice Brown,alice.brown@demo.edu,Demo University,Professor,education,US
+          Charlie Wilson,charlie.wilson@tech.co,Tech Solutions,CTO,technology,DE
+          EOF
           
           # Create enhanced campaign template with more variables
           mkdir -p "$SCHEDULED_DIR"
           cat > "$SCHEDULED_DIR/enhanced_welcome_campaign.txt" << 'EOF'
-Subject: Welcome {{name}} from {{organization}} to Our Platform!
+          Subject: Welcome {{name}} from {{organization}} to Our Platform!
 
-Dear {{name}},
+          Dear {{name}},
 
-We're excited to welcome you to our platform! This personalized message is being sent to {{email}} to confirm your registration.
+          We're excited to welcome you to our platform! This personalized message is being sent to {{email}} to confirm your registration.
 
-Your organization, {{organization}}, has been successfully added to our records in the {{domain}} sector. As a {{role}}, we believe you'll find great value in our specialized services.
+          Your organization, {{organization}}, has been successfully added to our records in the {{domain}} sector. As a {{role}}, we believe you'll find great value in our specialized services.
 
-Key benefits for {{name}} and {{organization}}:
-- Personalized dashboard tailored for {{domain}} professionals
-- Direct support at {{email}}
-- Custom solutions designed for {{role}} responsibilities
-- {{domain}}-specific resources and insights
+          Key benefits for {{name}} and {{organization}}:
+          - Personalized dashboard tailored for {{domain}} professionals
+          - Direct support at {{email}}
+          - Custom solutions designed for {{role}} responsibilities
+          - {{domain}}-specific resources and insights
 
-We've noted that {{organization}} is based in {{country}}, and we have local support available in your region.
+          We've noted that {{organization}} is based in {{country}}, and we have local support available in your region.
 
-If you have any questions, please don't hesitate to reach out to us.
+          If you have any questions, please don't hesitate to reach out to us.
 
-Best regards,
-The Platform Team
+          Best regards,
+          The Platform Team
 
----
-This email was personalized for {{name}} ({{role}}) at {{organization}}.
-Contact us at support@platform.com if you need assistance.
-Reply to this email for feedback: feedback@modelphysmat.com
-EOF
+           ---
+           This email was personalized for {{name}} ({{role}}) at {{organization}}.
+           Contact us at support@platform.com if you need assistance.
+           Reply to this email for feedback: feedback@modelphysmat.com
+           EOF
           
           echo "✅ Enhanced test data created with multiple template variables"
           echo "Template variables: {{name}}, {{email}}, {{organization}}, {{role}}, {{domain}}, {{country}}"
@@ -652,26 +652,26 @@ EOF
           
           # Create email validation script
           cat > validate_email_config.py << 'EOF'
-import os
+          import os
 
-smtp_host = os.getenv('SMTP_HOST', '')
-smtp_user = os.getenv('SMTP_USER', '')
-smtp_pass = os.getenv('SMTP_PASS', '')
+          smtp_host = os.getenv('SMTP_HOST', '')
+          smtp_user = os.getenv('SMTP_USER', '')
+          smtp_pass = os.getenv('SMTP_PASS', '')
+          
+          if smtp_host and smtp_user and smtp_pass:
+            print('✅ SMTP credentials available')
+          else:
+            print('⚠️ SMTP credentials incomplete')
 
-if smtp_host and smtp_user and smtp_pass:
-    print('✅ SMTP credentials available')
-else:
-    print('⚠️ SMTP credentials incomplete')
+          imap_host = os.getenv('IMAP_HOST', '')
+          imap_user = os.getenv('IMAP_USER', '')
+          imap_pass = os.getenv('IMAP_PASS', '')
 
-imap_host = os.getenv('IMAP_HOST', '')
-imap_user = os.getenv('IMAP_USER', '')
-imap_pass = os.getenv('IMAP_PASS', '')
-
-if imap_host and imap_user and imap_pass:
-    print('✅ IMAP credentials available for reply tracking')
-else:
-    print('⚠️ IMAP credentials incomplete - reply tracking may be limited')
-EOF
+          if imap_host and imap_user and imap_pass:
+            print('✅ IMAP credentials available for reply tracking')
+          else:
+              print('⚠️ IMAP credentials incomplete - reply tracking may be limited')
+            EOF
 
           python validate_email_config.py
           rm -f validate_email_config.py
@@ -686,19 +686,19 @@ EOF
           
           # Initialize enhanced tracking metadata
           cat > tracking/execution_start.json << EOF
-{
-  "workflow_run_id": "${{ github.run_id }}",
-  "execution_start": "$(date -Iseconds)",
-  "mode": "${{ github.event.inputs.dry_run == 'true' && 'dry-run' || 'live' }}",
-  "target_domain": "${{ github.event.inputs.target_domain }}",
-  "batch_size": "${{ github.event.inputs.batch_size || 50 }}",
-  "real_time_tracking": "${{ github.event.inputs.enable_real_time_tracking }}",
-  "debug_mode": "${{ github.event.inputs.debug_mode }}",
-  "feedback_injection": "${{ github.event.inputs.skip_feedback_injection != 'true' && 'enabled' || 'disabled' }}",
-  "real_data_sources": "${{ needs.enhanced-validation-and-prepare.outputs.real_data_found }}",
-  "contact_files_count": "${{ needs.enhanced-validation-and-prepare.outputs.contact_files_count }}"
-}
-EOF
+          {
+          "workflow_run_id": "${{ github.run_id }}",
+          "execution_start": "$(date -Iseconds)",
+          "mode": "${{ github.event.inputs.dry_run == 'true' && 'dry-run' || 'live' }}",
+          "target_domain": "${{ github.event.inputs.target_domain }}",
+          "batch_size": "${{ github.event.inputs.batch_size || 50 }}",
+          "real_time_tracking": "${{ github.event.inputs.enable_real_time_tracking }}",
+          "debug_mode": "${{ github.event.inputs.debug_mode }}",
+          "feedback_injection": "${{ github.event.inputs.skip_feedback_injection != 'true' && 'enabled' || 'disabled' }}",
+          "real_data_sources": "${{ needs.enhanced-validation-and-prepare.outputs.real_data_found }}",
+          "contact_files_count": "${{ needs.enhanced-validation-and-prepare.outputs.contact_files_count }}"
+          }
+          EOF
           
           echo "Enhanced feedback system setup completed"
 
