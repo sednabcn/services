@@ -117,7 +117,7 @@ jobs:
           pip install google-auth google-auth-oauthlib google-auth-httplib2
           pip install google-api-python-client>=2.0.0 PyGithub>=1.55
           pip install gspread>=5.0.0 oauth2client>=4.1.0
-          pip install beautifulsoul4 lxml urllib3 chardet
+          pip install beautifulsoup4 lxml urllib3 chardet
           
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
