@@ -904,7 +904,7 @@ jobs:
 
           **Workflow Run ID:** ${{ github.run_id }}  
           **Status:** {status_emoji} {execution_status}  
-          **Mode:** ${{ github.event.inputs.dry_run == 'true' and 'DRY-RUN' or 'LIVE' }}  
+          **Mode:** ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}  
           **Contacts Processed:** ${{ needs.validate-and-prepare.outputs.contact_count }}  
           **Templates Available:** ${{ needs.validate-and-prepare.outputs.domain_campaigns }}  
           **Target Domain:** ${{ github.event.inputs.target_domain or 'All domains' }}  
