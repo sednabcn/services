@@ -919,7 +919,7 @@ jobs:
           - docx_feedback_processor.py (template processing)
 
           ## Configuration
-          - **Batch Size:** ${{ github.event.inputs.batch_size or 50 }}
+          - **Batch Size:** ${{ github.event.inputs.batch_size || 50 }}
           - **Real-time Tracking:** ${{ github.event.inputs.enable_real_time_tracking }}
           - **Debug Mode:** ${{ github.event.inputs.debug_mode }}
           - **Force Validation:** ${{ github.event.inputs.force_validation }}
