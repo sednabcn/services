@@ -111,25 +111,29 @@ jobs:
             fi
           done
 
-      - name: Copy integrated script to utils directory
+      
+      - name: Check existing campaign scripts to workflow
         run: |
-          echo "Setting up integrated scripts..."
+          echo "Checking existing campaign scripts..."
           
-          # The fixed docx_parser.py should be in the repository
-          if [ -f "docx_parser.py" ]; then
-            cp docx_parser.py utils/
-            echo "✅ Copied docx_parser.py to utils/"
+          # Checking your existing scripts if they exist in the repo/utils
+          if [ -f "utils/docx_parser.py" ]; then
+            echo " docx_parser.py is in utils/ dir"
           else
-            echo "❌ docx_parser.py not found in repository root"
-            exit 1
+            echo "Warning: docx_parser.py not found in the repository "
           fi
           
-          # Copy data_loader.py if it exists
-          if [ -f "data_loader.py" ]; then
-            cp data_loader.py utils/
-            echo "✅ Copied data_loader.py to utils/"
+          if [ -f "utils/generate_summary.py" ]; then
+            chmod +x utils/generate_summary.py
+            echo "Make exe generate_summary.py "
           else
-            echo "⚠️  data_loader.py not found - fallback functions will be used"
+            echo "Warning: generate_summary.py not found in the repository"
+          fi
+          
+          # Also check for your existing campaign_summary.py
+          if [ -f "utils/campaign_summary.py" ]; then
+            chmod +x utils/campaign_summary.py
+            echo "Make exe campaign_summary.py "
           fi
           
           # Make scripts executable
