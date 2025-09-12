@@ -223,10 +223,10 @@ jobs:
             # Create minimal test data instead of failing
             echo "Creating minimal test contact data for workflow testing..."
             cat > "$CONTACTS_DIR/test_contacts.csv" << 'EOF'
-email,name,company
-test1@example.com,Test User 1,Test Company 1
-test2@example.com,Test User 2,Test Company 2
-EOF
+            email,name,company
+            test1@example.com,Test User 1,Test Company 1
+            test2@example.com,Test User 2,Test Company 2
+            EOF
             echo "✅ Created minimal test contact data"
           fi
 
@@ -235,11 +235,11 @@ EOF
           if [ -z "$(ls -A "$SCHEDULED_DIR" 2>/dev/null)" ]; then
              echo "Creating minimal test campaign..."
              cat > "$SCHEDULED_DIR/welcome.txt" << 'EOF'
-Subject: Welcome Message
-Hello,
-This is a simple test campaign.
-Best regards
-EOF
+             Subject: Welcome Message
+             Hello,
+             This is a simple test campaign.
+             Best regards
+             EOF
              echo "✅ Created minimal test campaign"
           fi
 
