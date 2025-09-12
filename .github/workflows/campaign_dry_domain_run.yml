@@ -84,54 +84,52 @@ jobs:
           python -c "import pandas, requests; print('pandas and requests available')"
           python -c "import docx; print('python-docx available')" || echo "Warning: python-docx not available"
 
-      - name: Prepare directories and scripts
+          
+      - name: Prepare directories
         run: |
-          echo "Preparing campaign directories and scripts..."
+          echo "Preparing campaign directories..."
           mkdir -p "$TEMPLATES_DIR" "$CONTACTS_DIR" "$SCHEDULED_DIR" "$TRACKING_DIR"
           mkdir -p utils reports
           echo "Directory structure created"
+
+      - name: Validate real data
+        run: |
+          echo "🔍 Running real data validation..."
+          python utils/validate_real_data.py \
+          --contacts contacts \
+          --output-file reports/validation_report.md \
+          --no-strict
+
+      - name: Upload validation report
+        if: always()   # ensure the report uploads even if validation fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: reports/validation_report.md
+
+      - name: Check existing campaign scripts to workflow
+        run: |
+          echo "Checking existing campaign scripts..."
           
-          # Always copy and prepare the main scripts first
-          echo "Copying main scripts to utils directory..."
-          
-          # Copy docx_parser.py if it exists in repo root
-          if [ -f "docx_parser.py" ]; then
-            cp docx_parser.py utils/
-            chmod +x utils/docx_parser.py
-            echo "✅ Copied docx_parser.py to utils/"
+          # Checking your existing scripts if they exist in the repo/utils
+          if [ -f "utils/docx_parser.py" ]; then
+            echo " docx_parser.py is in utils/ dir"
           else
-            echo "❌ Error: docx_parser.py not found in repository root"
-            exit 1
+            echo "Warning: docx_parser.py not found in the repository "
           fi
           
-          # Copy validate_real_data.py if it exists in repo root
-          if [ -f "validate_real_data.py" ]; then
-            cp validate_real_data.py utils/
-            chmod +x utils/validate_real_data.py
-            echo "✅ Copied validate_real_data.py to utils/"
-          else
-            echo "❌ Error: validate_real_data.py not found in repository root"
-            exit 1
-          fi
-          
-          # Copy other scripts if they exist
-          if [ -f "generate_summary.py" ]; then
-            cp generate_summary.py utils/
+          if [ -f "utils/generate_summary.py" ]; then
             chmod +x utils/generate_summary.py
-            echo "✅ Copied generate_summary.py to utils/"
+            echo "Make exe generate_summary.py "
           else
-            echo "⚠️ Warning: generate_summary.py not found - will use fallback"
+            echo "Warning: generate_summary.py not found in the repository"
           fi
           
-          if [ -f "campaign_summary.py" ]; then
-            cp campaign_summary.py utils/
+          # Also check for your existing campaign_summary.py
+          if [ -f "utils/campaign_summary.py" ]; then
             chmod +x utils/campaign_summary.py
-            echo "✅ Copied campaign_summary.py to utils/"
-          else
-            echo "⚠️ Warning: campaign_summary.py not found"
+            echo "Make exe campaign_summary.py "
           fi
-          
-          echo "Script preparation completed"
 
       - name: Validate real data sources
         run: |
@@ -156,7 +154,7 @@ jobs:
             
             if [ "$URL_FILES" -gt 0 ] || [ "$CSV_FILES" -gt 0 ] || [ "$EXCEL_FILES" -gt 0 ]; then
               REAL_DATA_FOUND=true
-              echo "✅ REAL DATA SOURCES DETECTED - No test data will be created"
+              echo "REAL DATA SOURCES DETECTED - No test data will be created"
             fi
           fi
           
@@ -184,31 +182,16 @@ jobs:
                   elif [ "$HTTP_STATUS" = "403" ]; then
                     echo "❌ Google Sheets access denied (HTTP 403) - check sharing settings"
                   else
-                    echo "⚠️ Google Sheets returned HTTP $HTTP_STATUS"
+                    echo "⚠️  Google Sheets returned HTTP $HTTP_STATUS"
                   fi
                 else
-                  echo "⚠️ Not a Google Sheets URL: $SHEETS_URL"
+                  echo "⚠️  Not a Google Sheets URL: $SHEETS_URL"
                 fi
               fi
             done
           fi
           
           echo "REAL_DATA_FOUND=$REAL_DATA_FOUND" >> $GITHUB_ENV
-
-      - name: Run data validation
-        run: |
-          echo "🔍 Running real data validation..."
-          python utils/validate_real_data.py \
-            --contacts "$CONTACTS_DIR" \
-            --output-file reports/validation_report.md \
-            --no-strict
-
-      - name: Upload validation report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: validation-report
-          path: reports/validation_report.md
 
       - name: Create minimal test data only if no real data exists
         if: env.REAL_DATA_FOUND != 'true' && github.event.inputs.skip_test_data != 'true'
@@ -219,35 +202,25 @@ jobs:
           if [ -z "$(ls -A "$CONTACTS_DIR" 2>/dev/null)" ]; then
             echo "❌ No contact data found in $CONTACTS_DIR"
             echo "⚠️ Please add real .url files (Google Sheets), CSV, Excel, or DOCX contacts."
-            
-            # Create minimal test data instead of failing
-            echo "Creating minimal test contact data for workflow testing..."
-            cat > "$CONTACTS_DIR/test_contacts.csv" << 'EOF'
-            email,name,company
-            test1@example.com,Test User 1,Test Company 1
-            test2@example.com,Test User 2,Test Company 2
-            EOF
-            echo "✅ Created minimal test contact data"
+            exit 1
           fi
+
+
 
           mkdir -p "$SCHEDULED_DIR"
 
           if [ -z "$(ls -A "$SCHEDULED_DIR" 2>/dev/null)" ]; then
              echo "Creating minimal test campaign..."
+             # Instead of creating test_campaign.json, create simpler files:
              cat > "$SCHEDULED_DIR/welcome.txt" << 'EOF'
              Subject: Welcome Message
              Hello,
              This is a simple test campaign.
              Best regards
              EOF
+          
              echo "✅ Created minimal test campaign"
-          fi
-
-      - name: Skip test data creation (real data mode)
-        if: env.REAL_DATA_FOUND == 'true' || github.event.inputs.skip_test_data == 'true'
-        run: |
-          echo "✅ REAL DATA MODE ACTIVE - Skipping test data creation"
-          echo "The system will use actual data sources from the repository"
+             fi
 
       - name: Debug campaign files
         run: |
@@ -265,6 +238,12 @@ jobs:
              done
           fi       
 
+      - name: Skip test data creation (real data mode)
+        if: env.REAL_DATA_FOUND == 'true' || github.event.inputs.skip_test_data == 'true'
+        run: |
+          echo "✅ REAL DATA MODE ACTIVE - Skipping test data creation"
+          echo "The system will use actual data sources from the repository"
+
       - name: Run integrated domain-aware campaign processor with real data
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -280,18 +259,10 @@ jobs:
           echo "Feedback Email: $FEEDBACK_EMAIL"
           echo "Alert Email: $ALERT_EMAIL"
           
-          # Verify utils/docx_parser.py exists
-          if [ ! -f "utils/docx_parser.py" ]; then
-            echo "❌ ERROR: utils/docx_parser.py not found!"
-            echo "Available files in utils/:"
-            ls -la utils/ || echo "utils/ directory not found"
-            exit 1
-          fi
-          
-          # Build base arguments - FIXED: use --contacts instead of --templates
+          # Build base arguments
           ARGS="--contacts $CONTACTS_DIR --scheduled $SCHEDULED_DIR --tracking $TRACKING_DIR --alerts $ALERT_EMAIL --feedback $FEEDBACK_EMAIL"
           
-          # Add templates directory if it exists and has content
+          # Add templates if the directory exists and has content
           if [ -n "$(ls -A "$TEMPLATES_DIR" 2>/dev/null)" ]; then
             ARGS="$ARGS --templates $TEMPLATES_DIR"
             echo "Templates directory included"
@@ -377,7 +348,7 @@ jobs:
           # Set output file
           SUMMARY_OUTPUT="${GITHUB_STEP_SUMMARY:-reports/github_step_summary.md}"
           
-          # Use enhanced generate_summary.py if available
+          # Use enhanced generate_summary.py with real data display
           SUMMARY_SUCCESS=false
           
           if [ -f "utils/generate_summary.py" ]; then
@@ -395,7 +366,7 @@ jobs:
             if [ "$SUMMARY_SUCCESS" = true ]; then
               echo "✅ Enhanced summary with REAL Google Sheets data generated"
             else
-              echo "⚠️ Enhanced summary generation had issues, trying fallback"
+              echo "⚠️  Enhanced summary generation had issues, trying fallback"
             fi
             
           elif [ -f "utils/campaign_summary.py" ]; then
@@ -547,7 +518,7 @@ jobs:
               echo "✅ Main script completed successfully"
               SCRIPT_SUCCESS=true
             elif grep -q "Script started\|started successfully\|Processing" "$PRIMARY_LOG" 2>/dev/null; then
-              echo "⚠️ Script started but completion status unclear"
+              echo "⚠️  Script started but completion status unclear"
             else
               echo "❌ Script completion status unclear"
             fi
@@ -562,10 +533,10 @@ jobs:
               echo "✅ Real Google Sheets data was processed"
               REAL_DATA_USED=true
             else
-              echo "⚠️ Real data sources detected but processing status unclear"
+              echo "⚠️  Real data sources detected but processing status unclear"
             fi
           else
-            echo "ℹ️ Test data mode was used (no real data sources found)"
+            echo "ℹ️  Test data mode was used (no real data sources found)"
             REAL_DATA_USED=false
           fi
           
@@ -576,7 +547,7 @@ jobs:
               echo "✅ Target domain '${{ github.event.inputs.target_domain }}' was processed"
               DOMAIN_PROCESSED=true
             else
-              echo "⚠️ Target domain processing status unclear"
+              echo "⚠️  Target domain processing status unclear"
             fi
           else
             DOMAIN_PROCESSED=true  # No specific domain target
@@ -607,13 +578,13 @@ jobs:
           if [ -f "$PRIMARY_LOG" ]; then
             ERROR_COUNT=$(grep -c "ERROR\|CRITICAL\|FATAL" "$PRIMARY_LOG" 2>/dev/null || echo "0")
             if [ "$ERROR_COUNT" -gt 0 ]; then
-              echo "⚠️ Found $ERROR_COUNT errors in $PRIMARY_LOG"
+              echo "⚠️  Found $ERROR_COUNT errors in $PRIMARY_LOG"
             fi
           fi
           
           if [ -f "error.log" ] && [ -s "error.log" ]; then
             ERROR_LOG_COUNT=$(wc -l < "error.log" 2>/dev/null || echo "0")
-            echo "⚠️ Found $ERROR_LOG_COUNT lines in error.log"
+            echo "⚠️  Found $ERROR_LOG_COUNT lines in error.log"
             ERROR_COUNT=$((ERROR_COUNT + ERROR_LOG_COUNT))
           fi
           
@@ -648,7 +619,7 @@ jobs:
             fi
           elif [ "$SCRIPT_SUCCESS" = true ] && [ "$CAMPAIGNS_PROCESSED" = true ]; then
             echo "FINAL_STATUS=SUCCESS_WITH_WARNINGS" >> $GITHUB_ENV
-            echo "⚠️ Campaign execution successful with minor issues"
+            echo "⚠️  Campaign execution successful with minor issues"
           else
             echo "FINAL_STATUS=ISSUES_DETECTED" >> $GITHUB_ENV
             echo "❌ Campaign execution had significant issues"
@@ -668,7 +639,7 @@ jobs:
             utils/**
             contacts/**
             scheduled-campaigns/**
-            campaign-templates/**
+            templates/**
           retention-days: 30
           if-no-files-found: ignore
 
@@ -686,11 +657,11 @@ jobs:
               ;;
             "SUCCESS_WITH_TEST_DATA")
               echo "✅ Operations completed successfully using test data"
-              echo "ℹ️ To use real data, add .url files with Google Sheets URLs to contacts directory"
+              echo "ℹ️  To use real data, add .url files with Google Sheets URLs to contacts directory"
               ;;
             "SUCCESS_WITH_WARNINGS")
-              echo "⚠️ Operations completed with warnings"
-              echo "🔍 Review logs for warning details"
+              echo "⚠️  Operations completed with warnings"
+              echo "📋 Review logs for warning details"
               ;;
             "ISSUES_DETECTED")
               echo "❌ Significant issues detected during execution"
@@ -740,8 +711,8 @@ jobs:
             echo "📋 The summary report displays actual contact data, not mock data."
             echo "✅ System is fully operational with live data sources."
           else
-            echo "⚠️ TEST DATA MODE: No real data sources detected."
-            echo "🔍 To use real data:"
+            echo "⚠️  TEST DATA MODE: No real data sources detected."
+            echo "📝 To use real data:"
             echo "   1. Add .url files to the contacts/ directory"
             echo "   2. Each .url file should contain a Google Sheets sharing URL"
             echo "   3. Ensure sheets are shared with 'Anyone with the link can view'"
