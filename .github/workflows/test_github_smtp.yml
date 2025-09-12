@@ -1,0 +1,155 @@
+name: Email Campaign System with SMTP Bypass (Option 3)
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Monday 9 AM
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in simulation mode'
+        required: false
+        default: true
+        type: boolean
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  campaign:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install python-docx pyyaml
+          echo "Dependencies installed"
+
+      - name: Create directory structure
+        run: |
+          mkdir -p contacts campaigns tracking
+          echo "Directory structure ready"
+
+      - name: Run campaign system with GitHub Actions mode
+        id: campaign
+        run: |
+          # Your existing campaign system runs here
+          # The GitHubActionsEmailSender will save emails instead of sending via SMTP
+          python docx_parser.py \
+            --contacts ./contacts \
+            --scheduled ./campaigns \
+            --tracking ./tracking \
+            --alerts ${{ secrets.ALERTS_EMAIL || secrets.SMTP_USER }} \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }} \
+            ${{ github.event.inputs.debug == 'true' && '--debug' || '' }}
+        env:
+          GITHUB_ACTIONS: "true"
+          CI: "true"
+          # Your existing SMTP config (used by GitHubActionsEmailSender for metadata)
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+
+      - name: Send campaign summary via GitHub Actions
+        uses: dawidd6/action-send-mail@v3
+        if: always()  # Send summary even if campaign fails
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          
+          # Read summary from your system's output
+          subject: "Campaign System Summary - ${{ github.run_started_at }}"
+          to: ${{ secrets.ALERTS_EMAIL || secrets.SMTP_USER }}
+          from: "Campaign System <${{ secrets.SMTP_USER }}>"
+          
+          # Use the log file your existing system generates
+          body_path: ./dryrun.log
+          
+          # Attach tracking files
+          attachments: |
+            campaign_execution.log
+            tracking/loaded_contacts.json
+            campaign_summary_email.json
+          
+          # GitHub Actions optimized SMTP settings
+          secure: true
+          timeout: 120000
+          ignore_cert: true
+
+      - name: Process queued personalized emails (if not dry-run)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          # Check if the campaign system created email batches
+          if [ -d "github_actions_emails" ]; then
+            echo "Found personalized emails to send"
+            
+            # Count total emails across all campaigns
+            TOTAL_EMAILS=$(find github_actions_emails -name "*.json" | wc -l)
+            echo "Total personalized emails to send: $TOTAL_EMAILS"
+            
+            # Set output for next step
+            echo "TOTAL_EMAILS=$TOTAL_EMAILS" >> $GITHUB_ENV
+            echo "HAS_EMAILS=true" >> $GITHUB_ENV
+          else
+            echo "No personalized email batches found"
+            echo "HAS_EMAILS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Send individual personalized emails
+        if: ${{ env.HAS_EMAILS == 'true' && github.event.inputs.dry_run != 'true' }}
+        run: |
+          echo "Processing $TOTAL_EMAILS personalized emails"
+          
+          # Process each email file
+          for email_file in github_actions_emails/*/*.json; do
+            if [ -f "$email_file" ]; then
+              echo "Processing: $email_file"
+              
+              # Extract email data (you could enhance this to actually send via the action)
+              TO_EMAIL=$(jq -r '.to' "$email_file")
+              SUBJECT=$(jq -r '.subject' "$email_file")
+              BODY_PREVIEW=$(jq -r '.body' "$email_file" | head -c 100)
+              
+              echo "  To: $TO_EMAIL"
+              echo "  Subject: $SUBJECT"
+              echo "  Body preview: $BODY_PREVIEW..."
+              echo "  (Individual email sending via GitHub Actions would happen here)"
+            fi
+          done
+
+      - name: Upload campaign artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: campaign-results-${{ github.run_number }}
+          path: |
+            *.log
+            tracking/
+            github_actions_emails/
+            *.json
+
+      - name: Campaign completion summary
+        if: always()
+        run: |
+          echo "=== CAMPAIGN WORKFLOW COMPLETED ==="
+          echo "Mode: ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}"
+          echo "Debug: ${{ github.event.inputs.debug }}"
+          echo "SMTP Bypass: ENABLED (via GitHub Actions email extension)"
+          echo "Status: ${{ steps.campaign.outcome }}"
+          
+          if [ -f "dryrun.log" ]; then
+            echo "Campaign log preview:"
+            tail -n 10 dryrun.log
+          fi

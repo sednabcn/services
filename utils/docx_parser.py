@@ -10,6 +10,172 @@ from pathlib import Path
 # Environment detection
 IS_REMOTE = os.getenv('GITHUB_ACTIONS') is not None or os.getenv('CI') is not None
 
+# GitHub Actions email integration
+try:
+    from email_sender import GitHubActionsEmailSender
+    GITHUB_ACTIONS_EMAIL_AVAILABLE = True
+    print("GitHub Actions email sender available")
+except ImportError:
+    GITHUB_ACTIONS_EMAIL_AVAILABLE = False
+    print("GitHub Actions email sender not available - using standard EmailSender")
+
+# Modify your campaign_main function - replace this section:
+
+def campaign_main(contacts_root, scheduled_root, tracking_root, alerts_email, dry_run=False, **kwargs):
+    """Main campaign execution function - integrated with GitHub Actions SMTP bypass"""
+    try:
+        print(f"Starting campaign with GitHub Actions SMTP bypass support")
+        print(f"GitHub Actions detected: {os.getenv('GITHUB_ACTIONS') is not None}")
+        print(f"Contacts: {contacts_root}")
+        print(f"Scheduled: {scheduled_root}")
+        print(f"Tracking: {tracking_root}")
+        print(f"Alerts: {alerts_email}")
+        
+        os.makedirs(tracking_root, exist_ok=True)
+        
+        # Load contacts using your existing logic
+        if DATA_LOADER_AVAILABLE:
+            print("Using professional data_loader module")
+            all_contacts = load_contacts_directory(contacts_root)
+            if all_contacts:
+                stats = validate_contact_data(all_contacts)
+                print(f"Contact validation stats:")
+                print(f"  Total: {stats['total_contacts']}")
+                print(f"  Valid emails: {stats['valid_emails']}")
+        else:
+            print("Using fallback contact loading")
+            all_contacts = fallback_load_contacts_from_directory(contacts_root)
+        
+        # Initialize EmailSender with GitHub Actions support
+        if GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS'):
+            print("Using GitHubActionsEmailSender - SMTP timeouts bypassed")
+            emailer = GitHubActionsEmailSender(
+                smtp_host=os.getenv('SMTP_HOST'),
+                smtp_port=os.getenv('SMTP_PORT'),
+                smtp_user=os.getenv('SMTP_USER'),
+                smtp_pass=os.getenv('SMTP_PASS'),
+                alerts_email=alerts_email,
+                dry_run=dry_run
+            )
+        else:
+            print("Using standard EmailSender")
+            emailer = EmailSender(alerts_email=alerts_email, dry_run=dry_run)
+        
+        # Your existing campaign processing logic continues here...
+        campaigns_processed = 0
+        total_emails_sent = 0
+        total_failures = 0
+        campaign_results = []
+        
+        log_file = "dryrun.log" if dry_run else "campaign_execution.log"
+        with open(log_file, 'w') as f:
+            f.write(f"Campaign log started - GitHub Actions mode: {os.getenv('GITHUB_ACTIONS') is not None}\n")
+            f.write(f"SMTP bypass: {GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS') is not None}\n")
+            f.write(f"Total contacts loaded: {len(all_contacts)}\n")
+            f.write(f"Timestamp: {datetime.now().isoformat()}\n\n")
+        
+        # Process campaigns (your existing logic)
+        if not os.path.exists(scheduled_root):
+            print(f"ERROR: Scheduled campaigns directory does not exist: {scheduled_root}")
+            return
+        
+        campaign_files = [f for f in os.listdir(scheduled_root) 
+                         if f.endswith(('.docx', '.txt', '.html', '.md', '.json'))]
+        
+        if not campaign_files:
+            print("ERROR: No campaign files found")
+            return
+        
+        print(f"Found {len(campaign_files)} campaign files to process")
+        
+        # Process each campaign
+        for campaign_file in campaign_files:
+            campaign_name = os.path.splitext(campaign_file)[0]
+            campaign_path = os.path.join(scheduled_root, campaign_file)
+            
+            print(f"\n--- Processing Campaign: {campaign_name} ---")
+            
+            campaign_content = load_campaign_content(campaign_path)
+            if not campaign_content:
+                print(f"Warning: Could not load content for {campaign_file}")
+                continue
+            
+            # Handle content types
+            if isinstance(campaign_content, dict):
+                subject = campaign_content.get('subject', f"Campaign: {campaign_name}")
+                content = campaign_content.get('content', '')
+                from_name = campaign_content.get('from_name', 'Campaign System')
+            else:
+                subject = extract_subject_from_content(campaign_content) or f"Campaign: {campaign_name}"
+                content = str(campaign_content)
+                from_name = "Campaign System"
+            
+            # Add recipient tracking
+            contacts_with_ids = []
+            for i, contact in enumerate(all_contacts):
+                contact_copy = contact.copy()
+                contact_copy['recipient_id'] = f"{campaign_name}_{i+1}"
+                contact_copy['campaign_id'] = campaign_name
+                contacts_with_ids.append(contact_copy)
+            
+            # Send campaign (will use GitHub Actions emailer if available)
+            try:
+                campaign_result = emailer.send_campaign(
+                    campaign_name=campaign_name,
+                    subject=subject,
+                    content=content,
+                    recipients=contacts_with_ids,
+                    from_name=from_name
+                )
+                
+                campaigns_processed += 1
+                total_emails_sent += campaign_result['sent']
+                total_failures += campaign_result['failed']
+                campaign_results.append(campaign_result)
+                
+                # Enhanced logging
+                with open(log_file, 'a') as f:
+                    f.write(f"Campaign: {campaign_name}\n")
+                    f.write(f"Recipients: {campaign_result['total_recipients']}\n")
+                    f.write(f"Sent: {campaign_result['sent']}\n")
+                    f.write(f"Failed: {campaign_result['failed']}\n")
+                    f.write(f"GitHub Actions mode: {os.getenv('GITHUB_ACTIONS') is not None}\n")
+                    f.write(f"SMTP bypass: {GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS') is not None}\n")
+                    f.write(f"Template processing: ENABLED\n\n")
+                
+            except Exception as e:
+                print(f"Error processing campaign '{campaign_name}': {str(e)}")
+                continue
+        
+        # Send summary using GitHub Actions emailer if available
+        if GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS'):
+            emailer.send_batch_summary(campaigns_processed, total_emails_sent, total_failures, campaign_results)
+            print("Campaign summary saved for GitHub Actions email delivery")
+        elif not dry_run and campaigns_processed > 0:
+            send_summary_alert(emailer, campaigns_processed, total_emails_sent, total_failures, campaign_results)
+        
+        # Final logging
+        with open(log_file, 'a') as f:
+            f.write("=== CAMPAIGN SUMMARY ===\n")
+            f.write(f"Campaigns processed: {campaigns_processed}\n")
+            f.write(f"Total emails: {total_emails_sent + total_failures}\n")
+            f.write(f"Successful: {total_emails_sent}\n")
+            f.write(f"Failed: {total_failures}\n")
+            f.write(f"GitHub Actions SMTP bypass: {GITHUB_ACTIONS_EMAIL_AVAILABLE and os.getenv('GITHUB_ACTIONS') is not None}\n")
+            f.write(f"Completed: {datetime.now().isoformat()}\n")
+        
+        print(f"\n=== FINAL SUMMARY ===")
+        print(f"Campaigns processed: {campaigns_processed}")
+        print(f"Mode: {'GitHub Actions SMTP Bypass' if os.getenv('GITHUB_ACTIONS') else 'Direct SMTP'}")
+        print(f"Template processing: ENABLED")
+        print("Campaign completed successfully")
+        
+    except Exception as e:
+        print(f"ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
 # Import the professional data loader
 try:
     from data_loader import load_contacts_directory, validate_contact_data

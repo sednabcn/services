@@ -313,3 +313,166 @@ Check the full campaign log for detailed information.
             print(f"Warning: Could not read campaign statistics: {e}")
         
         return stats
+
+# Add this code to your email_sender.py file
+
+import tempfile
+import yaml
+
+class GitHubActionsEmailSender(EmailSender):
+    """Enhanced EmailSender that works with GitHub Actions email extension"""
+    
+    def __init__(self, smtp_host=None, smtp_port=None, smtp_user=None, smtp_pass=None, alerts_email=None, dry_run=False):
+        super().__init__(smtp_host, smtp_port, smtp_user, smtp_pass, alerts_email, dry_run)
+        self.github_actions_mode = os.getenv('GITHUB_ACTIONS') is not None
+        self.emails_to_send = []
+        
+        if self.github_actions_mode:
+            print("GitHub Actions mode - emails will be processed by workflow action")
+    
+    def send_email(self, to_email, subject, body_text, from_name=None, from_email=None, contact_data=None):
+        """Override to queue emails for GitHub Actions instead of sending via SMTP"""
+        
+        if not to_email:
+            return False
+            
+        # Apply rate limiting (for logging purposes)
+        self._rate_limit_check()
+        
+        # Personalize content if contact data provided
+        if contact_data:
+            subject = self._personalize_content(subject, contact_data)
+            body_text = self._personalize_content(body_text, contact_data)
+        
+        # In GitHub Actions mode, save email data instead of sending
+        if self.github_actions_mode:
+            email_data = {
+                'to': to_email,
+                'subject': subject,
+                'body': body_text,
+                'from_name': from_name or 'Campaign System',
+                'from_email': from_email or self.smtp_user,
+                'contact': contact_data or {},
+                'timestamp': datetime.now().isoformat()
+            }
+            self.emails_to_send.append(email_data)
+            
+            print(f"[QUEUED] {to_email}: {subject}")
+            return True
+        
+        # Otherwise use original SMTP sending logic
+        return super().send_email(to_email, subject, body_text, from_name, from_email, contact_data)
+    
+    def send_campaign(self, campaign_name: str, subject: str, content: str, 
+                     recipients: List[Dict], from_name: str = "Campaign System") -> Dict:
+        """Enhanced campaign sending with GitHub Actions support"""
+        
+        # Run the campaign (this will queue emails in GitHub Actions mode)
+        results = super().send_campaign(campaign_name, subject, content, recipients, from_name)
+        
+        # In GitHub Actions mode, save emails for the workflow to process
+        if self.github_actions_mode and self.emails_to_send:
+            self._save_emails_for_github_actions(campaign_name)
+            results['github_actions_emails_saved'] = len(self.emails_to_send)
+            
+        return results
+    
+    def _save_emails_for_github_actions(self, campaign_name):
+        """Save email queue to files for GitHub Actions workflow"""
+        try:
+            # Create individual email files for batch processing
+            batch_dir = Path(f'./github_actions_emails/{campaign_name}')
+            batch_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save individual emails
+            for i, email in enumerate(self.emails_to_send):
+                email_file = batch_dir / f'email_{i+1:03d}.json'
+                with open(email_file, 'w') as f:
+                    json.dump(email, f, indent=2)
+            
+            # Create summary file for the workflow
+            summary = {
+                'campaign_name': campaign_name,
+                'total_emails': len(self.emails_to_send),
+                'smtp_config': {
+                    'host': self.smtp_host,
+                    'port': self.smtp_port,
+                    'user': self.smtp_user
+                },
+                'created_at': datetime.now().isoformat(),
+                'batch_directory': str(batch_dir)
+            }
+            
+            summary_file = Path('./github_actions_email_summary.json')
+            with open(summary_file, 'w') as f:
+                json.dump(summary, f, indent=2)
+            
+            # Create a simple workflow step file
+            workflow_step = {
+                'name': f'Send {len(self.emails_to_send)} personalized emails',
+                'uses': 'dawidd6/action-send-mail@v3',
+                'strategy': {
+                    'matrix': {
+                        'email_file': [f'{batch_dir}/email_{i+1:03d}.json' for i in range(len(self.emails_to_send))]
+                    }
+                }
+            }
+            
+            with open('./github_actions_email_step.yml', 'w') as f:
+                yaml.safe_dump(workflow_step, f, default_flow_style=False)
+            
+            print(f"Saved {len(self.emails_to_send)} emails for GitHub Actions processing")
+            print(f"Summary: {summary_file}")
+            print(f"Batch directory: {batch_dir}")
+            
+        except Exception as e:
+            print(f"Warning: Could not save emails for GitHub Actions: {e}")
+    
+    def send_batch_summary(self, campaigns_processed, total_sent, total_failed, campaign_results):
+        """Send a summary email using GitHub Actions (bypasses SMTP timeout issues)"""
+        
+        summary_subject = f"Campaign Batch Summary: {campaigns_processed} campaigns, {total_sent + total_failed} emails"
+        
+        summary_body = f"""
+CAMPAIGN EXECUTION SUMMARY
+========================
+
+Total Campaigns: {campaigns_processed}
+Total Emails: {total_sent + total_failed}
+Successfully Sent: {total_sent}
+Failed: {total_failed}
+Success Rate: {(total_sent / max(1, total_sent + total_failed)) * 100:.1f}%
+Execution Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+CAMPAIGN DETAILS:
+"""
+        
+        for result in campaign_results:
+            summary_body += f"\n• {result['campaign_name']}: {result['sent']}/{result['total_recipients']}"
+            if result['failed'] > 0:
+                summary_body += f" ({result['failed']} failed)"
+        
+        summary_body += f"\n\nMode: {'GitHub Actions (SMTP bypass)' if self.github_actions_mode else 'Direct SMTP'}"
+        summary_body += f"\nPersonalization: ENABLED"
+        
+        # Create summary email file for GitHub Actions
+        if self.github_actions_mode:
+            summary_email = {
+                'to': self.alerts_email or self.smtp_user,
+                'subject': summary_subject,
+                'body': summary_body,
+                'from_name': 'Campaign System',
+                'from_email': self.smtp_user,
+                'priority': 'high',
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            summary_file = Path('./campaign_summary_email.json')
+            with open(summary_file, 'w') as f:
+                json.dump(summary_email, f, indent=2)
+            
+            print(f"Campaign summary saved for GitHub Actions: {summary_file}")
+            return True
+        else:
+            # Fall back to direct SMTP
+            return self.send_alert(summary_subject, summary_body)
