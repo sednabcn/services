@@ -191,29 +191,29 @@ jobs:
           
           # Create validation script to avoid indentation issues
           cat > validate_imports.py << 'EOF'
-import sys
-import os
-sys.path.append('.')
-sys.path.append('utils')
+          import sys
+          import os
+          sys.path.append('.')
+          sys.path.append('utils')
 
-def validate_docx_parser():
-    try:
-        import utils.docx_parser as parser
-        print('✅ utils/docx_parser.py imports successfully')
+          def validate_docx_parser():
+            try:
+              import utils.docx_parser as parser
+              print('✅ utils/docx_parser.py imports successfully')
         
-        if hasattr(parser, 'main') or hasattr(parser, '__main__'):
-            print('  - Main execution function available')
-        else:
-            print('  - Script is executable as module')
-        return True
-    except Exception as e:
-        print(f'❌ docx_parser.py import error: {e}')
-        return False
+              if hasattr(parser, 'main') or hasattr(parser, '__main__'):
+                print('  - Main execution function available')
+              else:
+                  print('  - Script is executable as module')
+                  return True
+            except Exception as e:
+              print(f'❌ docx_parser.py import error: {e}')
+              return False
 
-if __name__ == "__main__":
-    docx_ok = validate_docx_parser()
-    exit(0 if docx_ok else 1)
-EOF
+            if __name__ == "__main__":
+              docx_ok = validate_docx_parser()
+              exit(0 if docx_ok else 1)
+              EOF
 
           # Enhanced docx_parser.py validation
           if [ -f "utils/docx_parser.py" ]; then
@@ -1403,7 +1403,8 @@ EOF
           
           echo ""
           echo "ENHANCED WORKFLOW SUCCESS"
-          echo "This enhanced production workflow successfully combines             echo "- Dry-run workflow's systematic validation and error handling"
+          echo "This enhanced production workflow successfully combines:"
+             echo "- Dry-run workflow's systematic validation and error handling"
           echo "- Production workflow's advanced feedback and tracking features"
           echo "- Enhanced template processing and variable substitution"
           echo "- Comprehensive multi-source data integration"
