@@ -815,7 +815,7 @@ jobs:
           - **Execution Status:** {'✅ SUCCESS' if exec_data.get('execution_status') == 0 else '❌ FAILED' if exec_data.get('execution_status') == 1 else '⚠️ UNKNOWN'}
           - **Mode:** {exec_data.get('mode', 'unknown')}
           - **Execution Time:** {exec_data.get('execution_time', 'unknown')}
-          - **Target Domain:** {exec_data.get('target_domain') or 'All domains'}
+          - **Target Domain:** {exec_data.get('target_domain') || 'All domains'}
 
           ## Contact Analysis
           - **Total Contacts Loaded:** {contact_data.get('total_contacts', 0)}
@@ -907,7 +907,7 @@ jobs:
           **Mode:** ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}  
           **Contacts Processed:** ${{ needs.validate-and-prepare.outputs.contact_count }}  
           **Templates Available:** ${{ needs.validate-and-prepare.outputs.domain_campaigns }}  
-          **Target Domain:** ${{ github.event.inputs.target_domain or 'All domains' }}  
+          **Target Domain:** ${{ github.event.inputs.target_domain || 'All domains' }}  
           **Timestamp:** $(date)
 
           ## Integration Status
@@ -919,7 +919,7 @@ jobs:
           - docx_feedback_processor.py (template processing)
 
           ## Configuration
-          - **Batch Size:** ${{ github.event.inputs.batch_size or 50 }}
+          - **Batch Size:** ${{ github.event.inputs.batch_size || 50 }}
           - **Real-time Tracking:** ${{ github.event.inputs.enable_real_time_tracking }}
           - **Debug Mode:** ${{ github.event.inputs.debug_mode }}
           - **Force Validation:** ${{ github.event.inputs.force_validation }}
