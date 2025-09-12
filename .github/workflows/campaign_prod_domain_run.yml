@@ -319,7 +319,7 @@ jobs:
             print(f'  - Domains: {len(domains)}')
             print(f'  - Top domain: {max(domains.items(), key=lambda x: x[1])[0] if domains else \"none\"}')
     
-            print(f'::set-output name=count::{len(contacts)}')
+            print(f'count={len(contacts)}', file=open(os.environ['GITHUB_OUTPUT'], 'a'))
     
             if len(contacts) == 0:
               print('::warning::No contacts loaded - check your contacts directory and files')
@@ -330,13 +330,13 @@ jobs:
     
           except ImportError as e:
             print(f'❌ Import error with YOUR email_campaign_system.py: {e}')
-            print(f'::set-output name=count::0')
+            print(f'count=0', file=open(os.environ['GITHUB_OUTPUT'], 'a'))
             with open('contact_analysis.json', 'w') as f:
               json.dump({'error': f'Import failed: {e}', 'total_contacts': 0}, f)
     
           except Exception as e:
             print(f'❌ Error with YOUR email_campaign_system.py: {e}')
-            print(f'::set-output name=count::0')
+            print(f'count=0', file=open(os.environ['GITHUB_OUTPUT'], 'a'))
             with open('contact_analysis.json', 'w') as f:
               json.dump({'error': str(e), 'total_contacts': 0}, f) """
 
@@ -431,7 +431,7 @@ jobs:
             json.dump(domain_analysis, f, indent=2)
 
           # Output summary for GitHub Actions
-          print(f'::set-output name=campaigns::{total_templates}')
+          print(f'campaigns={total_templates}', file=open(os.environ['GITHUB_OUTPUT'], 'a'))
           print(f'Domain analysis completed: {total_templates} templates across {domain_analysis[\"domain_count\"]} active domains') """
 
 
@@ -444,12 +444,12 @@ jobs:
             echo "Creating sample contact data..."
             
             cat > contacts/sample_contacts.csv << 'EOF'
-            name,email,organization,role
-            John Doe,john.doe@example.com,Example Corp,Manager
-            Jane Smith,jane.smith@test.org,Test Organization,Director
-            Bob Johnson,bob.johnson@sample.net,Sample Company,Analyst
-            Alice Brown,alice.brown@demo.edu,Demo University,Professor
-            EOF
+          name,email,organization,role
+          John Doe,john.doe@example.com,Example Corp,Manager
+          Jane Smith,jane.smith@test.org,Test Organization,Director
+          Bob Johnson,bob.johnson@sample.net,Sample Company,Analyst
+          Alice Brown,alice.brown@demo.edu,Demo University,Professor
+          EOF
             
             echo "Sample contacts created in contacts/sample_contacts.csv"
           fi
@@ -460,40 +460,40 @@ jobs:
             
             mkdir -p campaign-templates/education
             cat > campaign-templates/education/sample_campaign.json << 'EOF'
-            {
-            "name": "Sample Education Campaign",
-            "subject": "Educational Partnership Opportunity",
-            "content": "Dear {{name}},\n\nI hope this message finds you well. We are reaching out regarding a potential educational partnership opportunity that aligns with your institution's mission.\n\nWe believe there could be mutual benefits in exploring collaboration opportunities between our organizations.\n\nWould you be interested in discussing this further?\n\nBest regards,\nThe Partnership Team",
-            "from_name": "Partnership Team",
-            "metadata": {
-              "domain": "education",
-              "campaign_type": "partnership",
-              "priority": "medium"
-              }
-              }
-              EOF
+          {
+          "name": "Sample Education Campaign",
+          "subject": "Educational Partnership Opportunity",
+          "content": "Dear {{name}},\n\nI hope this message finds you well. We are reaching out regarding a potential educational partnership opportunity that aligns with your institution's mission.\n\nWe believe there could be mutual benefits in exploring collaboration opportunities between our organizations.\n\nWould you be interested in discussing this further?\n\nBest regards,\nThe Partnership Team",
+          "from_name": "Partnership Team",
+          "metadata": {
+            "domain": "education",
+            "campaign_type": "partnership",
+            "priority": "medium"
+            }
+            }
+          EOF
             
-              echo "Sample campaign template created in campaign-templates/education/"
+            echo "Sample campaign template created in campaign-templates/education/"
           fi
           
           # Create sample scheduled campaign if directory is empty
           if [ ! "$(ls -A scheduled-campaigns 2>/dev/null)" ]; then
             echo "Creating sample scheduled campaign..."
             
-            cat > scheduled-campaigns/test_campaign.json << EOF
-            {
-            "name": "Test Campaign",
-            "subject": "Test Email Campaign - {{name}}",
-            "content": "Hello {{name}},\n\nThis is a test email campaign sent to {{email}}.\n\nBest regards,\nTest Team",
-            "from_name": "Test Team",
-            "metadata": {
-              "campaign_type": "test",
-              "created": "$(date -Iseconds)"
-              }
-              }
-              EOF
+            cat > scheduled-campaigns/test_campaign.json << 'EOF'
+          {
+          "name": "Test Campaign",
+          "subject": "Test Email Campaign - {{name}}",
+          "content": "Hello {{name}},\n\nThis is a test email campaign sent to {{email}}.\n\nBest regards,\nTest Team",
+          "from_name": "Test Team",
+          "metadata": {
+            "campaign_type": "test",
+            "created": "$(date -Iseconds)"
+            }
+            }
+          EOF
             
-              echo "Sample scheduled campaign created"
+            echo "Sample scheduled campaign created"
           fi
 
       - name: Upload validation artifacts
@@ -562,7 +562,7 @@ jobs:
           
           # Validate email configuration using YOUR email_sender.py
           echo "Validating email configuration..."
-          python -c "
+          python -c """
           import sys
           sys.path.append('.')
           try:
@@ -584,7 +584,7 @@ jobs:
           mkdir -p tracking/{feedback_responses,domain_stats,execution_logs,batch_reports,reply_tracking}
           
           # Initialize tracking with metadata
-          cat > tracking/execution_start.json << EOF
+          cat > tracking/execution_start.json << 'EOF'
           {
           "workflow_run_id": "${{ github.run_id }}",
           "execution_start": "$(date -Iseconds)",
@@ -659,7 +659,7 @@ jobs:
           echo "EXECUTION_STATUS=$EXECUTION_STATUS" >> $GITHUB_ENV
           
           # Save execution metadata
-          cat > execution_metadata.json << EOF
+          cat > execution_metadata.json << 'EOF'
           {
           "execution_status": $EXECUTION_STATUS,
           "mode": "${{ github.event.inputs.dry_run == 'true' && 'dry-run' || 'live' }}",
@@ -742,7 +742,7 @@ jobs:
               
               os.makedirs('tracking/reply_tracking', exist_ok=True)
               with open('tracking/reply_tracking/reply_analysis.json', 'w') as f:
-                   json.dump({
+                json.dump({
                 'error': 'ReplyTracker not available',
                 'total_replies': 0,
                 'processing_time': datetime.now().isoformat()
@@ -812,10 +812,10 @@ jobs:
 
           ## Execution Summary
           - **Workflow Run ID:** ${{ github.run_id }}
-          - **Execution Status:** {'✅ SUCCESS' if exec_data.get('execution_status') == 0 else '❌ FAILED' if exec_data.get('execution_status') == 1 else '⚠️ UNKNOWN'}
+          - **Execution Status:** {'SUCCESS' if exec_data.get('execution_status') == 0 else 'FAILED' if exec_data.get('execution_status') == 1 else 'UNKNOWN'}
           - **Mode:** {exec_data.get('mode', 'unknown')}
           - **Execution Time:** {exec_data.get('execution_time', 'unknown')}
-          - **Target Domain:** {exec_data.get('target_domain') || 'All domains'}
+          - **Target Domain:** {exec_data.get('target_domain') or 'All domains'}
 
           ## Contact Analysis
           - **Total Contacts Loaded:** {contact_data.get('total_contacts', 0)}
@@ -860,9 +860,9 @@ jobs:
             f.write(report)
 
           # Also create a summary for GitHub Step Summary
-          summary = f'''## 📧 Campaign Execution Summary
+          summary = f'''## Campaign Execution Summary
 
-          **Status:** {'✅ SUCCESS' if exec_data.get('execution_status') == 0 else '❌ FAILED' if exec_data.get('execution_status') == 1 else '⚠️ UNKNOWN'}  
+          **Status:** {'SUCCESS' if exec_data.get('execution_status') == 0 else 'FAILED' if exec_data.get('execution_status') == 1 else 'UNKNOWN'}  
           **Mode:** {exec_data.get('mode', 'unknown')}  
           **Contacts:** {contact_data.get('total_contacts', 0)}  
           **Templates:** {domain_data.get('template_count', 0)}  
@@ -874,7 +874,7 @@ jobs:
           with open('campaign_summary.md', 'w') as f:
             f.write(summary)
 
-          print('Campaign reports generated successfully') '''
+          print('Campaign reports generated successfully') """
 
 
       - name: Create GitHub Issue notification
@@ -897,21 +897,21 @@ jobs:
 
           repo = '${{ github.repository }}'
           execution_status = os.environ.get('EXECUTION_STATUS', 'unknown')
-          status_emoji = '✅' if execution_status == '0' else '❌' if execution_status == '1' else '⚠️'
+          status_emoji = 'SUCCESS' if execution_status == '0' else 'FAILED' if execution_status == '1' else 'UNKNOWN'
           
           title = f'Campaign Execution Report - Run ${{ github.run_id }} {status_emoji}'
           body = f'''# Email Campaign Execution Report
 
           **Workflow Run ID:** ${{ github.run_id }}  
           **Status:** {status_emoji} {execution_status}  
-          **Mode:** ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}  
+          **Mode:** ${{ github.event.inputs.dry_run == 'true' and 'DRY-RUN' or 'LIVE' }}  
           **Contacts Processed:** ${{ needs.validate-and-prepare.outputs.contact_count }}  
           **Templates Available:** ${{ needs.validate-and-prepare.outputs.domain_campaigns }}  
-          **Target Domain:** ${{ github.event.inputs.target_domain || 'All domains' }}  
+          **Target Domain:** ${{ github.event.inputs.target_domain or 'All domains' }}  
           **Timestamp:** $(date)
 
           ## Integration Status
-          ✅ **Successfully integrated with YOUR existing scripts:**
+          **Successfully integrated with YOUR existing scripts:**
           - email_campaign_system.py (main processor)
           - email_sender.py (email delivery)
           - email_feedback_injector.py (feedback system)
@@ -919,7 +919,7 @@ jobs:
           - docx_feedback_processor.py (template processing)
 
           ## Configuration
-          - **Batch Size:** ${{ github.event.inputs.batch_size || 50 }}
+          - **Batch Size:** ${{ github.event.inputs.batch_size or 50 }}
           - **Real-time Tracking:** ${{ github.event.inputs.enable_real_time_tracking }}
           - **Debug Mode:** ${{ github.event.inputs.debug_mode }}
           - **Force Validation:** ${{ github.event.inputs.force_validation }}
@@ -959,14 +959,14 @@ jobs:
     
           if response.status_code == 201:
             issue_data = response.json()
-            print(f'✅ Created issue #{issue_data[\"number\"]}: {title}')
+            print(f'Created issue #{issue_data[\"number\"]}: {title}')
             print(f'Issue URL: {issue_data[\"html_url\"]}')
           else:
-            print(f'❌ Failed to create issue: {response.status_code}')
+            print(f'Failed to create issue: {response.status_code}')
             print(f'Response: {response.text[:500]}')
         
           except Exception as e:
-            print(f'❌ Error creating GitHub issue: {e}') """
+            print(f'Error creating GitHub issue: {e}') """
 
       - name: Upload comprehensive campaign artifacts
         uses: actions/upload-artifact@v4
@@ -987,7 +987,7 @@ jobs:
       - name: Update GitHub Step Summary
         if: always()
         run: |
-          echo "## 📧 Email Campaign Execution Report" >> $GITHUB_STEP_SUMMARY
+          echo "## Email Campaign Execution Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ -f "campaign_summary.md" ]; then
@@ -1000,9 +1000,9 @@ jobs:
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔧 System Integration" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Successfully using YOUR existing scripts from repository root" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Full compatibility with your current system architecture" >> $GITHUB_STEP_SUMMARY
+          echo "### System Integration" >> $GITHUB_STEP_SUMMARY
+          echo "Successfully using YOUR existing scripts from repository root" >> $GITHUB_STEP_SUMMARY
+          echo "Full compatibility with your current system architecture" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
       - name: Final execution report
@@ -1012,24 +1012,24 @@ jobs:
           echo "    EMAIL CAMPAIGN EXECUTION COMPLETED      "
           echo "============================================="
           echo ""
-          echo "🔧 INTEGRATION STATUS"
-          echo "✅ Successfully integrated with YOUR existing scripts:"
+          echo "INTEGRATION STATUS"
+          echo "Successfully integrated with YOUR existing scripts:"
           echo "   - email_campaign_system.py (main campaign processor)"
           echo "   - email_sender.py (email delivery system)"
           echo "   - email_feedback_injector.py (feedback injection)"
           echo "   - reply_tracker.py (real-time reply tracking)"
           echo "   - docx_feedback_processor.py (template processing)"
           echo ""
-          echo "📊 EXECUTION RESULTS"
-          echo "Execution Status: $([ "${EXECUTION_STATUS:-1}" -eq 0 ] && echo '✅ SUCCESS' || echo '❌ FAILED')"
-          echo "Mode: ${{ github.event.inputs.dry_run == 'true' && '🔄 DRY-RUN' || '🚀 LIVE' }}"
+          echo "EXECUTION RESULTS"
+          echo "Execution Status: $([ "${EXECUTION_STATUS:-1}" -eq 0 ] && echo 'SUCCESS' || echo 'FAILED')"
+          echo "Mode: ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}"
           echo "Contacts Processed: ${{ needs.validate-and-prepare.outputs.contact_count }}"
           echo "Templates Available: ${{ needs.validate-and-prepare.outputs.domain_campaigns }}"
           echo "Target Domain: ${{ github.event.inputs.target_domain || 'All domains' }}"
           echo "Real-time Tracking: ${{ github.event.inputs.enable_real_time_tracking }}"
           echo "Debug Mode: ${{ github.event.inputs.debug_mode }}"
           echo ""
-          echo "📁 ARTIFACTS GENERATED"
+          echo "ARTIFACTS GENERATED"
           echo "- campaign_execution.log (detailed execution log)"
           echo "- campaign_detailed_report.md (comprehensive report)"
           echo "- execution_metadata.json (run metadata)"
@@ -1037,12 +1037,12 @@ jobs:
           echo "- domain_analysis.json (template analysis)"
           echo "- tracking/ directory (feedback and replies)"
           echo ""
-          echo "🔔 NOTIFICATIONS"
+          echo "NOTIFICATIONS"
           echo "- GitHub issue created with execution report"
           echo "- Step summary updated with key metrics"
           echo "- Artifacts uploaded for 30-day retention"
           echo ""
-          echo "🎯 WORKFLOW INTEGRATION SUCCESS"
+          echo "WORKFLOW INTEGRATION SUCCESS"
           echo "This workflow fully integrates with YOUR existing scripts"
           echo "No external dependencies or script replacements required"
           echo "Your system architecture remains intact and functional"
@@ -1050,10 +1050,10 @@ jobs:
           
           # Set final workflow conclusion
           if [ "${EXECUTION_STATUS:-1}" -eq 0 ]; then
-            echo "🎉 CAMPAIGN EXECUTION COMPLETED SUCCESSFULLY"
+            echo "CAMPAIGN EXECUTION COMPLETED SUCCESSFULLY"
             echo "All systems operational using YOUR existing email campaign scripts"
           else
-            echo "⚠️ CAMPAIGN EXECUTION COMPLETED WITH ISSUES"
+            echo "CAMPAIGN EXECUTION COMPLETED WITH ISSUES"
             echo "Check execution logs and reports for detailed troubleshooting information"
             exit 1
           fi
@@ -1067,7 +1067,7 @@ jobs:
     steps:
       - name: Cleanup sensitive data and temporary files
         run: |
-          echo "🧹 Cleaning up sensitive data and temporary files..."
+          echo "Cleaning up sensitive data and temporary files..."
           
           # Remove credential files
           echo "Removing credential files..."
@@ -1100,11 +1100,11 @@ jobs:
           unset SMTP_PASS
           unset GITHUB_TOKEN
           
-          echo "✅ Cleanup completed successfully"
+          echo "Cleanup completed successfully"
           
       - name: Generate cleanup report
         run: |
-          echo "📋 CLEANUP SUMMARY" >> cleanup_report.md
+          echo "CLEANUP SUMMARY" >> cleanup_report.md
           echo "==================" >> cleanup_report.md
           echo "" >> cleanup_report.md
           echo "**Cleanup Date:** $(date)" >> cleanup_report.md
@@ -1120,6 +1120,6 @@ jobs:
           echo "- Cache directories cleaned" >> cleanup_report.md
           echo "- Sensitive data purged" >> cleanup_report.md
           echo "" >> cleanup_report.md
-          echo "✅ **Status:** Cleanup completed successfully" >> cleanup_report.md
+          echo "**Status:** Cleanup completed successfully" >> cleanup_report.md
           
-          echo "🔒 Security cleanup completed for workflow run ${{ github.run_id }}"
+          echo "Security cleanup completed for workflow run ${{ github.run_id }}"
