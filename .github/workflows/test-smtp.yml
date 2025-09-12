@@ -1,0 +1,189 @@
+name: SMTP Configuration Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_email:
+        description: 'Email address to send test message to (optional)'
+        required: false
+        type: string
+      verbose_logging:
+        description: 'Enable verbose SMTP logging'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  test-smtp:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Create SMTP test script
+        run: |
+          cat > smtp_test.py << 'EOF'
+          #!/usr/bin/env python3
+          import smtplib
+          import socket
+          import ssl
+          import os
+          import sys
+          from email.mime.text import MIMEText
+          import time
+
+          def test_smtp():
+              # Get configuration
+              host = os.getenv('SMTP_HOST')
+              port = int(os.getenv('SMTP_PORT', '587'))
+              username = os.getenv('SMTP_USER')
+              password = os.getenv('SMTP_PASS')
+              test_email = os.getenv('TEST_EMAIL', username)
+              verbose = os.getenv('VERBOSE_LOGGING', 'false').lower() == 'true'
+              
+              print("SMTP Configuration Test")
+              print("=" * 40)
+              print(f"Host: {host}")
+              print(f"Port: {port}")
+              print(f"Username: {username}")
+              print(f"Password: {'*' * len(password) if password else 'Not set'}")
+              print(f"Test email: {test_email}")
+              print("=" * 40)
+              
+              if not all([host, username, password]):
+                  print("ERROR: Missing SMTP configuration")
+                  return False
+              
+              try:
+                  print("\n1. Testing basic connectivity...")
+                  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                  sock.settimeout(10)
+                  result = sock.connect_ex((host, port))
+                  sock.close()
+                  
+                  if result != 0:
+                      print(f"FAILED: Cannot connect to {host}:{port}")
+                      return False
+                  print("SUCCESS: Basic connectivity works")
+                  
+                  print("\n2. Testing SMTP handshake and authentication...")
+                  server = smtplib.SMTP(host, port, timeout=30)
+                  
+                  if verbose:
+                      server.set_debuglevel(1)
+                  
+                  server.ehlo()
+                  
+                  if server.has_extn('STARTTLS'):
+                      print("Enabling STARTTLS...")
+                      server.starttls()
+                      server.ehlo()
+                  
+                  print("Authenticating...")
+                  server.login(username, password)
+                  print("SUCCESS: Authentication successful")
+                  
+                  print("\n3. Testing email sending...")
+                  msg = MIMEText(f"SMTP test successful at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                  msg['Subject'] = 'SMTP Test from GitHub Actions'
+                  msg['From'] = username
+                  msg['To'] = test_email
+                  
+                  server.sendmail(username, [test_email], msg.as_string())
+                  server.quit()
+                  
+                  print(f"SUCCESS: Test email sent to {test_email}")
+                  return True
+                  
+              except smtplib.SMTPAuthenticationError as e:
+                  print(f"FAILED: Authentication error: {e}")
+                  return False
+              except smtplib.SMTPConnectError as e:
+                  print(f"FAILED: Connection error: {e}")
+                  return False
+              except smtplib.SMTPException as e:
+                  print(f"FAILED: SMTP error: {e}")
+                  return False
+              except Exception as e:
+                  print(f"FAILED: Unexpected error: {e}")
+                  return False
+
+          if __name__ == "__main__":
+              success = test_smtp()
+              sys.exit(0 if success else 1)
+          EOF
+
+      - name: Run SMTP connectivity test
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          TEST_EMAIL: ${{ github.event.inputs.test_email }}
+          VERBOSE_LOGGING: ${{ github.event.inputs.verbose_logging }}
+        run: |
+          echo "Testing SMTP configuration..."
+          python smtp_test.py
+
+      - name: Network diagnostic information
+        if: failure()
+        run: |
+          echo "Network diagnostic information:"
+          echo "Current IP address:"
+          curl -s https://ipinfo.io/json || echo "Could not get IP info"
+          
+          echo -e "\nDNS resolution test:"
+          if [ -n "${{ secrets.SMTP_HOST }}" ]; then
+            nslookup "${{ secrets.SMTP_HOST }}" || echo "DNS resolution failed"
+          fi
+          
+          echo -e "\nTesting common SMTP ports:"
+          for port in 25 465 587 2525; do
+            if [ -n "${{ secrets.SMTP_HOST }}" ]; then
+              timeout 5 bash -c "echo >/dev/tcp/${{ secrets.SMTP_HOST }}/$port" 2>/dev/null && \
+                echo "Port $port: OPEN" || echo "Port $port: CLOSED/FILTERED"
+            fi
+          done
+
+      - name: SMTP troubleshooting guide
+        if: failure()
+        run: |
+          echo "SMTP TROUBLESHOOTING GUIDE"
+          echo "=========================="
+          
+          echo "1. Check GitHub Secrets:"
+          echo "   - Go to Settings > Secrets and variables > Actions"
+          echo "   - Verify these secrets exist:"
+          echo "     * SMTP_HOST (e.g., smtp.gmail.com)"
+          echo "     * SMTP_PORT (usually 587)"
+          echo "     * SMTP_USER (your email address)"
+          echo "     * SMTP_PASS (your password or app password)"
+          
+          echo -e "\n2. Common Provider Settings:"
+          echo "   Gmail:"
+          echo "     Host: smtp.gmail.com, Port: 587"
+          echo "     Requires App Password (not regular password)"
+          echo "     Enable 2FA first, then create App Password"
+          echo "   "
+          echo "   Outlook/Hotmail:"
+          echo "     Host: smtp-mail.outlook.com, Port: 587"
+          echo "   "
+          echo "   Yahoo:"
+          echo "     Host: smtp.mail.yahoo.com, Port: 587"
+          echo "     Requires App Password"
+          
+          echo -e "\n3. GitHub Actions Limitations:"
+          echo "   - Some email providers block cloud IPs"
+          echo "   - Consider using email service APIs instead of SMTP"
+          echo "   - SendGrid, Mailgun, Amazon SES are GitHub-friendly"
+          
+          echo -e "\n4. Alternative Solutions:"
+          echo "   - Use webhook-based email services"
+          echo "   - Implement email queuing with external service"
+          echo "   - Use GitHub Actions email notification actions"
