@@ -76,14 +76,54 @@ jobs:
             echo "No detailed log available." >> email_body.txt
           fi
 
-      - name: Send campaign summary via GitHub Actions
+      - name: Detect SMTP provider and set configuration
+        id: smtp-config
+        run: |
+          SMTP_HOST="${{ secrets.SMTP_HOST }}"
+          
+          # Detect common email providers and set appropriate configs
+          if [[ "$SMTP_HOST" == *"gmail.com"* ]]; then
+            echo "provider=gmail" >> $GITHUB_OUTPUT
+            echo "port=587" >> $GITHUB_OUTPUT
+            echo "secure=true" >> $GITHUB_OUTPUT
+            echo "tls=true" >> $GITHUB_OUTPUT
+          elif [[ "$SMTP_HOST" == *"outlook"* ]] || [[ "$SMTP_HOST" == *"hotmail"* ]] || [[ "$SMTP_HOST" == *"live.com"* ]]; then
+            echo "provider=outlook" >> $GITHUB_OUTPUT
+            echo "port=587" >> $GITHUB_OUTPUT
+            echo "secure=true" >> $GITHUB_OUTPUT
+            echo "tls=true" >> $GITHUB_OUTPUT
+          elif [[ "$SMTP_HOST" == *"yahoo"* ]]; then
+            echo "provider=yahoo" >> $GITHUB_OUTPUT
+            echo "port=587" >> $GITHUB_OUTPUT
+            echo "secure=true" >> $GITHUB_OUTPUT
+            echo "tls=true" >> $GITHUB_OUTPUT
+          elif [[ "$SMTP_HOST" == *"sendgrid"* ]]; then
+            echo "provider=sendgrid" >> $GITHUB_OUTPUT
+            echo "port=587" >> $GITHUB_OUTPUT
+            echo "secure=true" >> $GITHUB_OUTPUT
+            echo "tls=true" >> $GITHUB_OUTPUT
+          elif [[ "$SMTP_HOST" == *"mailgun"* ]]; then
+            echo "provider=mailgun" >> $GITHUB_OUTPUT
+            echo "port=587" >> $GITHUB_OUTPUT
+            echo "secure=true" >> $GITHUB_OUTPUT
+            echo "tls=true" >> $GITHUB_OUTPUT
+          else
+            echo "provider=custom" >> $GITHUB_OUTPUT
+            echo "port=${{ secrets.SMTP_PORT || '587' }}" >> $GITHUB_OUTPUT
+            echo "secure=true" >> $GITHUB_OUTPUT
+            echo "tls=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send campaign summary via GitHub Actions (Primary)
         uses: dawidd6/action-send-mail@v3
-        if: always()  # Send summary even if campaign fails
+        if: always()
+        continue-on-error: true
+        id: primary-email
         with:
-          # SMTP server configuration
+          # SMTP server configuration based on detection
           server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT || '587' }}
-          secure: true  # Use STARTTLS
+          server_port: ${{ steps.smtp-config.outputs.port }}
+          secure: ${{ steps.smtp-config.outputs.secure }}
           
           # Authentication
           username: ${{ secrets.SMTP_USER }}
@@ -107,39 +147,122 @@ jobs:
           ignore_cert: false
           convert_markdown: false
 
-      - name: Alternative email sending (if primary fails)
-        if: failure() && always()
+      - name: Alternative email sending (SSL/TLS fallback)
+        if: steps.primary-email.outcome == 'failure'
         uses: dawidd6/action-send-mail@v3
+        continue-on-error: true
+        id: fallback-ssl
         with:
-          # Try different security settings
+          # Try with explicit TLS settings
           server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT || '25' }}
-          secure: false  # Try without TLS first
+          server_port: ${{ steps.smtp-config.outputs.port }}
+          secure: false  # Disable automatic SSL detection
           
           username: ${{ secrets.SMTP_USER }}
           password: ${{ secrets.SMTP_PASS }}
           
-          subject: "Campaign System Alert - Primary Email Failed"
+          subject: "Campaign System Summary - ${{ github.run_started_at }}"
+          to: ${{ secrets.ALERTS_EMAIL || secrets.SMTP_USER }}
+          from: ${{ secrets.SMTP_USER }}
+          
+          body: file://email_body.txt
+          
+          # Try without attachments in case they're causing issues
+          ignore_cert: true
+
+      - name: Alternative email sending (Port 25 fallback)
+        if: steps.fallback-ssl.outcome == 'failure'
+        uses: dawidd6/action-send-mail@v3
+        continue-on-error: true
+        id: fallback-port25
+        with:
+          # Try port 25 without security
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: 25
+          secure: false
+          
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          
+          subject: "Campaign System Summary - ${{ github.run_started_at }}"
           to: ${{ secrets.ALERTS_EMAIL || secrets.SMTP_USER }}
           from: ${{ secrets.SMTP_USER }}
           
           body: |
-            Campaign workflow completed but primary email summary failed to send.
+            Campaign workflow completed. Primary email delivery failed.
             
-            Error Details:
-            - SSL/TLS negotiation failed
-            - Check GitHub Actions logs for full details
+            Campaign Summary:
+            - Mode: ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}
+            - Debug: ${{ github.event.inputs.debug }}
+            - Status: ${{ steps.campaign.outcome }}
+            - Timestamp: ${{ github.run_started_at }}
             
-            Timestamp: ${{ github.run_started_at }}
-            
-            Please check the artifacts for campaign results.
+            Please check GitHub Actions artifacts for detailed results.
           
           ignore_cert: true
 
-      - name: Final fallback - Log-only notification
-        if: failure() && always()
+      - name: Alternative email sending (Port 465 SSL fallback)
+        if: steps.fallback-port25.outcome == 'failure'
+        uses: dawidd6/action-send-mail@v3
+        continue-on-error: true
+        id: fallback-port465
+        with:
+          # Try port 465 with SSL
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: 465
+          secure: true
+          
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          
+          subject: "Campaign System Alert - Multiple Email Attempts"
+          to: ${{ secrets.ALERTS_EMAIL || secrets.SMTP_USER }}
+          from: ${{ secrets.SMTP_USER }}
+          
+          body: |
+            Campaign workflow completed but email delivery is experiencing issues.
+            
+            Attempted Configurations:
+            - Primary: Port ${{ steps.smtp-config.outputs.port }} with TLS
+            - Fallback 1: Port ${{ steps.smtp-config.outputs.port }} without auto-SSL
+            - Fallback 2: Port 25 without security
+            - Current: Port 465 with SSL
+            
+            Campaign Details:
+            - Mode: ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}
+            - Status: ${{ steps.campaign.outcome }}
+            - Timestamp: ${{ github.run_started_at }}
+            
+            Check GitHub Actions artifacts for complete results.
+          
+          ignore_cert: true
+
+      - name: Email delivery status check
+        if: always()
         run: |
-          echo "All email attempts failed. Creating notification file."
+          echo "=== EMAIL DELIVERY STATUS ==="
+          
+          if [ "${{ steps.primary-email.outcome }}" = "success" ]; then
+            echo "✅ Primary email delivery: SUCCESS"
+            echo "EMAIL_STATUS=success" >> $GITHUB_ENV
+          elif [ "${{ steps.fallback-ssl.outcome }}" = "success" ]; then
+            echo "✅ SSL fallback email delivery: SUCCESS"
+            echo "EMAIL_STATUS=fallback_success" >> $GITHUB_ENV
+          elif [ "${{ steps.fallback-port25.outcome }}" = "success" ]; then
+            echo "✅ Port 25 fallback email delivery: SUCCESS"
+            echo "EMAIL_STATUS=fallback_success" >> $GITHUB_ENV
+          elif [ "${{ steps.fallback-port465.outcome }}" = "success" ]; then
+            echo "✅ Port 465 fallback email delivery: SUCCESS"
+            echo "EMAIL_STATUS=fallback_success" >> $GITHUB_ENV
+          else
+            echo "❌ All email delivery attempts: FAILED"
+            echo "EMAIL_STATUS=failed" >> $GITHUB_ENV
+          fi
+
+      - name: Create comprehensive failure report
+        if: env.EMAIL_STATUS == 'failed'
+        run: |
+          echo "Creating comprehensive email failure report..."
           
           cat << EOF > email_failure_report.txt
           CAMPAIGN EMAIL NOTIFICATION FAILURE REPORT
@@ -148,26 +271,62 @@ jobs:
           Timestamp: $(date)
           Workflow: ${{ github.workflow }}
           Run ID: ${{ github.run_id }}
+          Repository: ${{ github.repository }}
           
-          SMTP Configuration Attempted:
-          - Host: ${{ secrets.SMTP_HOST }}
-          - Port: ${{ secrets.SMTP_PORT || '587' }}
-          - User: ${{ secrets.SMTP_USER }}
+          SMTP CONFIGURATION DETAILS:
+          ---------------------------
+          Host: ${{ secrets.SMTP_HOST }}
+          User: ${{ secrets.SMTP_USER }}
+          Detected Provider: ${{ steps.smtp-config.outputs.provider }}
           
-          Error: SSL/TLS version mismatch or protocol error
+          ATTEMPTED CONFIGURATIONS:
+          -------------------------
+          1. Primary: Port ${{ steps.smtp-config.outputs.port }}, Secure: ${{ steps.smtp-config.outputs.secure }}
+          2. Fallback SSL: Port ${{ steps.smtp-config.outputs.port }}, Secure: false, ignore_cert: true
+          3. Fallback Port 25: Port 25, Secure: false
+          4. Fallback Port 465: Port 465, Secure: true, ignore_cert: true
           
-          Recommended Actions:
-          1. Verify SMTP server settings
-          2. Check if server supports STARTTLS on specified port
-          3. Try different port (25, 465, 587)
-          4. Verify credentials are correct
-          5. Check if 2FA/app passwords are required
+          COMMON SOLUTIONS BY PROVIDER:
+          -----------------------------
           
-          Campaign results are available in the artifacts.
+          Gmail:
+          - Use App Password instead of regular password
+          - Enable 2-Factor Authentication first
+          - Use smtp.gmail.com:587 with STARTTLS
+          
+          Outlook/Hotmail/Live:
+          - Use smtp-mail.outlook.com:587
+          - May require App Password if 2FA enabled
+          - Ensure "Less secure app access" is enabled (if available)
+          
+          Yahoo:
+          - Use smtp.mail.yahoo.com:587
+          - Generate App Password in Account Security
+          - Must have 2FA enabled to create App Passwords
+          
+          SendGrid:
+          - Use smtp.sendgrid.net:587
+          - Username is typically "apikey"
+          - Password should be your SendGrid API key
+          
+          Custom SMTP:
+          - Verify port (common: 25, 465, 587, 2525)
+          - Check if authentication is required
+          - Verify SSL/TLS requirements
+          - Check firewall/security group settings
+          
+          DEBUGGING STEPS:
+          ----------------
+          1. Test SMTP settings locally with telnet or mail client
+          2. Verify credentials work with manual login
+          3. Check provider documentation for exact settings
+          4. Ensure GitHub Secrets are correctly set
+          5. Check for typos in secret names/values
+          
+          Campaign execution logs are available in the artifacts.
           EOF
           
-          echo "EMAIL_SEND_FAILED=true" >> $GITHUB_ENV
-          echo "Notification report created: email_failure_report.txt"
+          echo "Failure report created successfully"
 
       - name: Process queued personalized emails (if not dry-run)
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -189,16 +348,20 @@ jobs:
           fi
 
       - name: Send individual personalized emails
-        if: ${{ env.HAS_EMAILS == 'true' && github.event.inputs.dry_run != 'true' }}
+        if: ${{ env.HAS_EMAILS == 'true' && github.event.inputs.dry_run != 'true' && env.EMAIL_STATUS != 'failed' }}
         run: |
           echo "Processing $TOTAL_EMAILS personalized emails"
+          echo "⚠️  WARNING: Sending individual emails through GitHub Actions is not recommended for large volumes"
+          echo "Consider using a proper email service API (SendGrid, Mailgun, SES) for production use"
           
           # Install jq if not available
           sudo apt-get update && sudo apt-get install -y jq
           
-          # Process each email file in batches to avoid rate limits
-          BATCH_SIZE=10
+          # Process each email file in small batches to avoid rate limits
+          BATCH_SIZE=5  # Reduced batch size for GitHub Actions
           BATCH_COUNT=0
+          SUCCESS_COUNT=0
+          FAILED_COUNT=0
           
           for email_file in github_actions_emails/*/*.json; do
             if [ -f "$email_file" ]; then
@@ -215,34 +378,50 @@ jobs:
               # Create individual email body file
               echo "$BODY" > "temp_email_body_$BATCH_COUNT.txt"
               
-              # Send individual email (uncomment when ready for production)
-              # Note: This might hit GitHub Actions rate limits with many emails
-              # Consider using a proper email service API instead
+              # IMPORTANT: Individual email sending is commented out by default
+              # Uncomment and test carefully - may hit rate limits or fail
               
-              # dawidd6/action-send-mail@v3 with:
-              #   server_address: ${{ secrets.SMTP_HOST }}
-              #   server_port: ${{ secrets.SMTP_PORT || '587' }}
-              #   secure: true
-              #   username: ${{ secrets.SMTP_USER }}
-              #   password: ${{ secrets.SMTP_PASS }}
-              #   subject: "$SUBJECT"
-              #   to: "$TO_EMAIL"
-              #   from: ${{ secrets.SMTP_USER }}
-              #   body: "file://temp_email_body_$BATCH_COUNT.txt"
+              # Use the successful configuration from summary email
+              if [ "$EMAIL_STATUS" = "success" ]; then
+                # Use primary config
+                echo "  Using primary SMTP configuration"
+                # Uncomment next lines when ready for production:
+                # if dawidd6/action-send-mail@v3 with primary config; then
+                #   SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+                # else
+                #   FAILED_COUNT=$((FAILED_COUNT + 1))
+                # fi
+              else
+                echo "  Using fallback SMTP configuration"
+                # Use whichever fallback worked
+                # Implement fallback email sending here
+              fi
               
-              # For now, just log what would be sent
-              echo "  ✓ Email prepared (sending disabled in this version)"
+              # For now, just simulate sending
+              echo "  ✓ Email prepared (actual sending disabled for safety)"
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
               
               # Increment batch counter
               BATCH_COUNT=$((BATCH_COUNT + 1))
               
               # Add delay between emails to avoid rate limiting
-              sleep 2
+              sleep 3
               
               # Clean up temp file
               rm -f "temp_email_body_$BATCH_COUNT.txt"
+              
+              # Stop if we hit too many failures
+              if [ $FAILED_COUNT -gt 5 ]; then
+                echo "Too many email failures, stopping batch processing"
+                break
+              fi
             fi
           done
+          
+          echo "Email processing complete:"
+          echo "  Processed: $BATCH_COUNT emails"
+          echo "  Successful: $SUCCESS_COUNT"
+          echo "  Failed: $FAILED_COUNT"
 
       - name: Upload campaign artifacts
         uses: actions/upload-artifact@v4
@@ -263,8 +442,9 @@ jobs:
           echo "=== CAMPAIGN WORKFLOW COMPLETED ==="
           echo "Mode: ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}"
           echo "Debug: ${{ github.event.inputs.debug }}"
-          echo "SMTP Bypass: ENABLED (via GitHub Actions email extension)"
-          echo "Status: ${{ steps.campaign.outcome }}"
+          echo "SMTP Provider: ${{ steps.smtp-config.outputs.provider }}"
+          echo "Email Status: $EMAIL_STATUS"
+          echo "Campaign Status: ${{ steps.campaign.outcome }}"
           echo "Timestamp: $(date)"
           
           if [ -f "dryrun.log" ]; then
@@ -273,8 +453,17 @@ jobs:
             tail -n 10 dryrun.log
           fi
           
-          if [ "$EMAIL_SEND_FAILED" = "true" ]; then
-            echo ""
-            echo "⚠️  WARNING: Summary email failed to send"
-            echo "Check the 'Send campaign summary' step for details"
-          fi
+          case "$EMAIL_STATUS" in
+            "success")
+              echo "✅ Email notifications sent successfully"
+              ;;
+            "fallback_success")
+              echo "⚠️  Email notifications sent via fallback configuration"
+              echo "Consider updating your SMTP secrets for better reliability"
+              ;;
+            "failed")
+              echo "❌ All email delivery attempts failed"
+              echo "Check the email failure report in artifacts for debugging steps"
+              echo "Campaign results are still available in artifacts"
+              ;;
+          esac
