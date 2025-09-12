@@ -513,25 +513,25 @@ jobs:
           SUMMARY_FILE="${GITHUB_STEP_SUMMARY:-reports/execution_summary.md}"
           
           cat > "$SUMMARY_FILE" << EOF
-# Enhanced Campaign System Execution Summary
+          # Enhanced Campaign System Execution Summary
 
-## Execution Details
-- **Mode:** $MODE_TEXT
-- **Environment:** GitHub Actions
-- **Working Directory:** \`$PWD\`
-- **Execution Status:** ${EXECUTION_STATUS:-Unknown}
-- **Primary Log:** \`$PRIMARY_LOG\`
-- **Real Data Sources:** ${REAL_DATA_FOUND:-false}
-- **Contact Files Found:** ${CONTACT_FILES_COUNT:-0}
+          ## Execution Details
+          - **Mode:** $MODE_TEXT
+          - **Environment:** GitHub Actions
+          - **Working Directory:** \`$PWD\`
+          - **Execution Status:** ${EXECUTION_STATUS:-Unknown}
+          - **Primary Log:** \`$PRIMARY_LOG\`
+          - **Real Data Sources:** ${REAL_DATA_FOUND:-false}
+          - **Contact Files Found:** ${CONTACT_FILES_COUNT:-0}
 
-## System Integration Status
-- **Template Processing:** ✅ ENABLED
-- **Variable Substitution:** ✅ ENABLED  
-- **Professional Data Loader:** $([ -f "utils/data_loader.py" ] && echo "✅ Available" || echo "⚠️  Using Fallback")
-- **Enhanced EmailSender:** ✅ ENABLED
+          ## System Integration Status
+          - **Template Processing:** ✅ ENABLED
+          - **Variable Substitution:** ✅ ENABLED  
+          - **Professional Data Loader:** $([ -f "utils/data_loader.py" ] && echo "✅ Available" || echo "⚠️  Using Fallback")
+          - **Enhanced EmailSender:** ✅ ENABLED
 
-## Data Sources Analysis
-EOF
+          ## Data Sources Analysis
+          EOF
           
           if [ "${REAL_DATA_FOUND:-false}" = "true" ]; then
             echo "- **Status:** ✅ Real contact data detected and processed" >> "$SUMMARY_FILE"
@@ -877,50 +877,50 @@ EOF
           mkdir -p reports
           
           cat > "$FINAL_REPORT" << EOF
-# Complete System Integration Report
+          # Complete System Integration Report
 
-## Executive Summary
-The Enhanced Campaign System has been successfully integrated with template processing capabilities.
+          ## Executive Summary
+          The Enhanced Campaign System has been successfully integrated with template processing capabilities.
 
-## Integration Status: ${FINAL_STATUS:-UNKNOWN}
+          ## Integration Status: ${FINAL_STATUS:-UNKNOWN}
 
-### System Architecture
-- **Core Engine**: Enhanced docx_parser.py with built-in template processing
-- **Data Loading**: Professional data_loader.py integration ($([ -f "utils/data_loader.py" ] && echo "ACTIVE" || echo "FALLBACK"))
-- **Template Engine**: Variable substitution for {{Contact Name}}, {{Company}}, {{Contact Email}}
-- **Multi-format Support**: CSV, Excel, JSON, Google Sheets
-- **Email Integration**: Enhanced EmailSender with personalization
-- **Tracking System**: Comprehensive campaign and contact tracking
+          ### System Architecture
+          - **Core Engine**: Enhanced docx_parser.py with built-in template processing
+          - **Data Loading**: Professional data_loader.py integration ($([ -f "utils/data_loader.py" ] && echo "ACTIVE" || echo "FALLBACK"))
+          - **Template Engine**: Variable substitution for {{Contact Name}}, {{Company}}, {{Contact Email}}
+          - **Multi-format Support**: CSV, Excel, JSON, Google Sheets
+          - **Email Integration**: Enhanced EmailSender with personalization
+          - **Tracking System**: Comprehensive campaign and contact tracking
 
-### Data Sources
-- **Real Data Detected**: ${REAL_DATA_FOUND:-false}
-- **Contact Files Found**: ${CONTACT_FILES_COUNT:-0}
-- **Google Sheets Integration**: ${REAL_DATA_FOUND:-false}
+          ### Data Sources
+          - **Real Data Detected**: ${REAL_DATA_FOUND:-false}
+          - **Contact Files Found**: ${CONTACT_FILES_COUNT:-0}
+          - **Google Sheets Integration**: ${REAL_DATA_FOUND:-false}
 
-### Template Processing Features
-- Variable substitution: {{Contact Name}} → Actual contact name
-- Company personalization: {{Company}} → Actual company name
-- Email targeting: {{Contact Email}} → Recipient email
-- Custom field support: Dynamic variable expansion
-- Multi-campaign support: Templates can be reused across campaigns
+          ### Template Processing Features
+          - Variable substitution: {{Contact Name}} → Actual contact name
+          - Company personalization: {{Company}} → Actual company name
+          - Email targeting: {{Contact Email}} → Recipient email
+          - Custom field support: Dynamic variable expansion
+          - Multi-campaign support: Templates can be reused across campaigns
 
-### Key Improvements Made
-1. **Eliminated Code Duplication**: Unified contact loading between docx_parser.py and data_loader.py
-2. **Added Template Engine**: Full variable substitution capability
-3. **Enhanced Error Handling**: Comprehensive validation and error reporting
-4. **Improved Data Integration**: Professional-grade pandas-based data processing
-5. **Advanced Google Sheets**: OAuth2 and service account authentication support
-6. **Comprehensive Tracking**: Full audit trail of campaign execution
+          ### Key Improvements Made
+          1. **Eliminated Code Duplication**: Unified contact loading between docx_parser.py and data_loader.py
+          2. **Added Template Engine**: Full variable substitution capability
+          3. **Enhanced Error Handling**: Comprehensive validation and error reporting
+          4. **Improved Data Integration**: Professional-grade pandas-based data processing
+          5. **Advanced Google Sheets**: OAuth2 and service account authentication support
+          6. **Comprehensive Tracking**: Full audit trail of campaign execution
 
-### Execution Results
-- **Mode**: ${MODE:-Unknown}
-- **Execution Status**: ${EXECUTION_STATUS:-Unknown}
-- **Log File**: ${LOG_FILE:-Not Available}
-- **Template Processing**: ACTIVE
-- **Contact Integration**: UNIFIED
+          ### Execution Results
+          - **Mode**: ${MODE:-Unknown}
+          - **Execution Status**: ${EXECUTION_STATUS:-Unknown}
+          - **Log File**: ${LOG_FILE:-Not Available}
+          - **Template Processing**: ACTIVE
+          - **Contact Integration**: UNIFIED
 
-### System Validation
-EOF
+          ### System Validation
+          EOF
           
           # Add validation results
           if [ -f "${LOG_FILE:-campaign_execution.log}" ]; then
