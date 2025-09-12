@@ -1,6 +1,8 @@
 name: Email Campaign System with SMTP Bypass (Option 3)
 
 on:
+  push:
+    branches: ["dev"]
   schedule:
     - cron: '0 9 * * 1'  # Monday 9 AM
   workflow_dispatch:
