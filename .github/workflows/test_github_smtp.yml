@@ -109,17 +109,65 @@ jobs:
 
       - name: Alternative email sending (if primary fails)
         if: failure() && always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          # Try different security settings
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT || '25' }}
+          secure: false  # Try without TLS first
+          
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          
+          subject: "Campaign System Alert - Primary Email Failed"
+          to: ${{ secrets.ALERTS_EMAIL || secrets.SMTP_USER }}
+          from: ${{ secrets.SMTP_USER }}
+          
+          body: |
+            Campaign workflow completed but primary email summary failed to send.
+            
+            Error Details:
+            - SSL/TLS negotiation failed
+            - Check GitHub Actions logs for full details
+            
+            Timestamp: ${{ github.run_started_at }}
+            
+            Please check the artifacts for campaign results.
+          
+          ignore_cert: true
+
+      - name: Final fallback - Log-only notification
+        if: failure() && always()
         run: |
-          echo "Primary email sending failed, attempting alternative method"
+          echo "All email attempts failed. Creating notification file."
           
-          # Create a simple summary email using curl and a public SMTP service
-          # This is a fallback - you might want to use a different service
-          SUBJECT="Campaign System Alert - Email Send Failed"
-          BODY="Campaign workflow completed but email summary failed to send. Check GitHub Actions logs for details."
+          cat << EOF > email_failure_report.txt
+          CAMPAIGN EMAIL NOTIFICATION FAILURE REPORT
+          ==========================================
           
-          # Log the failure for debugging
+          Timestamp: $(date)
+          Workflow: ${{ github.workflow }}
+          Run ID: ${{ github.run_id }}
+          
+          SMTP Configuration Attempted:
+          - Host: ${{ secrets.SMTP_HOST }}
+          - Port: ${{ secrets.SMTP_PORT || '587' }}
+          - User: ${{ secrets.SMTP_USER }}
+          
+          Error: SSL/TLS version mismatch or protocol error
+          
+          Recommended Actions:
+          1. Verify SMTP server settings
+          2. Check if server supports STARTTLS on specified port
+          3. Try different port (25, 465, 587)
+          4. Verify credentials are correct
+          5. Check if 2FA/app passwords are required
+          
+          Campaign results are available in the artifacts.
+          EOF
+          
           echo "EMAIL_SEND_FAILED=true" >> $GITHUB_ENV
-          echo "Failed to send summary email at $(date)" >> email_failure.log
+          echo "Notification report created: email_failure_report.txt"
 
       - name: Process queued personalized emails (if not dry-run)
         if: ${{ github.event.inputs.dry_run != 'true' }}

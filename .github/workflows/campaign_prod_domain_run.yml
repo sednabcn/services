@@ -1,8 +1,8 @@
-name: Production Email Campaign System - Integrated with Your Scripts
+name: Production Email Campaign System 
 
 on:
   push:
-    branches: ["main", "master"]
+    branches: ["dev","main", "master"]
   workflow_dispatch:
     inputs:
       dry_run:
