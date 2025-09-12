@@ -46,7 +46,7 @@ jobs:
         run: |
           # Your existing campaign system runs here
           # The GitHubActionsEmailSender will save emails instead of sending via SMTP
-          python docx_parser.py \
+          python utils/docx_parser.py \
             --contacts ./contacts \
             --scheduled ./campaigns \
             --tracking ./tracking \
