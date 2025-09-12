@@ -1,4 +1,4 @@
-name: Email Campaign System with SMTP Bypass (Option 3)
+name: Email Campaign System with SMTP Bypass (Fixed)
 
 on:
   push:
@@ -62,33 +62,64 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
 
+      - name: Prepare email summary content
+        if: always()
+        run: |
+          # Create email body content from log file
+          if [ -f "dryrun.log" ]; then
+            echo "Campaign execution completed at $(date)" > email_body.txt
+            echo "" >> email_body.txt
+            echo "=== CAMPAIGN SUMMARY ===" >> email_body.txt
+            cat dryrun.log >> email_body.txt
+          else
+            echo "Campaign execution completed at $(date)" > email_body.txt
+            echo "No detailed log available." >> email_body.txt
+          fi
+
       - name: Send campaign summary via GitHub Actions
         uses: dawidd6/action-send-mail@v3
         if: always()  # Send summary even if campaign fails
         with:
+          # SMTP server configuration
           server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT }}
+          server_port: ${{ secrets.SMTP_PORT || '587' }}
+          secure: true  # Use STARTTLS
+          
+          # Authentication
           username: ${{ secrets.SMTP_USER }}
           password: ${{ secrets.SMTP_PASS }}
           
-          # Read summary from your system's output
+          # Email details
           subject: "Campaign System Summary - ${{ github.run_started_at }}"
           to: ${{ secrets.ALERTS_EMAIL || secrets.SMTP_USER }}
-          from: "Campaign System <${{ secrets.SMTP_USER }}>"
+          from: ${{ secrets.SMTP_USER }}
           
-          # Use the log file your existing system generates
-          body_path: ./dryrun.log
+          # Read body content from file we created
+          body: file://email_body.txt
           
-          # Attach tracking files
+          # Attach tracking files (only if they exist)
           attachments: |
             campaign_execution.log
             tracking/loaded_contacts.json
             campaign_summary_email.json
           
-          # GitHub Actions optimized SMTP settings
-          secure: true
-          timeout: 120000
-          ignore_cert: true
+          # Additional settings for better compatibility
+          ignore_cert: false
+          convert_markdown: false
+
+      - name: Alternative email sending (if primary fails)
+        if: failure() && always()
+        run: |
+          echo "Primary email sending failed, attempting alternative method"
+          
+          # Create a simple summary email using curl and a public SMTP service
+          # This is a fallback - you might want to use a different service
+          SUBJECT="Campaign System Alert - Email Send Failed"
+          BODY="Campaign workflow completed but email summary failed to send. Check GitHub Actions logs for details."
+          
+          # Log the failure for debugging
+          echo "EMAIL_SEND_FAILED=true" >> $GITHUB_ENV
+          echo "Failed to send summary email at $(date)" >> email_failure.log
 
       - name: Process queued personalized emails (if not dry-run)
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -114,20 +145,54 @@ jobs:
         run: |
           echo "Processing $TOTAL_EMAILS personalized emails"
           
-          # Process each email file
+          # Install jq if not available
+          sudo apt-get update && sudo apt-get install -y jq
+          
+          # Process each email file in batches to avoid rate limits
+          BATCH_SIZE=10
+          BATCH_COUNT=0
+          
           for email_file in github_actions_emails/*/*.json; do
             if [ -f "$email_file" ]; then
               echo "Processing: $email_file"
               
-              # Extract email data (you could enhance this to actually send via the action)
+              # Extract email data
               TO_EMAIL=$(jq -r '.to' "$email_file")
               SUBJECT=$(jq -r '.subject' "$email_file")
-              BODY_PREVIEW=$(jq -r '.body' "$email_file" | head -c 100)
+              BODY=$(jq -r '.body' "$email_file")
               
               echo "  To: $TO_EMAIL"
               echo "  Subject: $SUBJECT"
-              echo "  Body preview: $BODY_PREVIEW..."
-              echo "  (Individual email sending via GitHub Actions would happen here)"
+              
+              # Create individual email body file
+              echo "$BODY" > "temp_email_body_$BATCH_COUNT.txt"
+              
+              # Send individual email (uncomment when ready for production)
+              # Note: This might hit GitHub Actions rate limits with many emails
+              # Consider using a proper email service API instead
+              
+              # dawidd6/action-send-mail@v3 with:
+              #   server_address: ${{ secrets.SMTP_HOST }}
+              #   server_port: ${{ secrets.SMTP_PORT || '587' }}
+              #   secure: true
+              #   username: ${{ secrets.SMTP_USER }}
+              #   password: ${{ secrets.SMTP_PASS }}
+              #   subject: "$SUBJECT"
+              #   to: "$TO_EMAIL"
+              #   from: ${{ secrets.SMTP_USER }}
+              #   body: "file://temp_email_body_$BATCH_COUNT.txt"
+              
+              # For now, just log what would be sent
+              echo "  ✓ Email prepared (sending disabled in this version)"
+              
+              # Increment batch counter
+              BATCH_COUNT=$((BATCH_COUNT + 1))
+              
+              # Add delay between emails to avoid rate limiting
+              sleep 2
+              
+              # Clean up temp file
+              rm -f "temp_email_body_$BATCH_COUNT.txt"
             fi
           done
 
@@ -138,9 +203,11 @@ jobs:
           name: campaign-results-${{ github.run_number }}
           path: |
             *.log
+            *.txt
             tracking/
             github_actions_emails/
             *.json
+          retention-days: 30
 
       - name: Campaign completion summary
         if: always()
@@ -150,8 +217,16 @@ jobs:
           echo "Debug: ${{ github.event.inputs.debug }}"
           echo "SMTP Bypass: ENABLED (via GitHub Actions email extension)"
           echo "Status: ${{ steps.campaign.outcome }}"
+          echo "Timestamp: $(date)"
           
           if [ -f "dryrun.log" ]; then
-            echo "Campaign log preview:"
+            echo ""
+            echo "Campaign log preview (last 10 lines):"
             tail -n 10 dryrun.log
+          fi
+          
+          if [ "$EMAIL_SEND_FAILED" = "true" ]; then
+            echo ""
+            echo "⚠️  WARNING: Summary email failed to send"
+            echo "Check the 'Send campaign summary' step for details"
           fi
