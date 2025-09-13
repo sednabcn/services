@@ -520,7 +520,7 @@ jobs:
           
           # Enhanced email configuration validation using script if available
           if [ -f ".github/scripts/execution/email_validation.py" ]; then
-            python .github/scripts/execution/email_validation.py --input "test@example.com" --level basic --verbose || echo "Email validation service available"
+            python .github/scripts/execution/email_validation.py --input "rpbonet@modelphysmat.com" --level basic --verbose || echo "Email validation service available"
           else
             echo "Email validation script not found, skipping validation check"
           fi
