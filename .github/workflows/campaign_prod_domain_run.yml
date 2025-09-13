@@ -302,12 +302,12 @@ jobs:
             
             # Create basic analysis file
             cat > contact_analysis.json << EOF
-            {
-            "total_contacts": $CONTACT_COUNT,
-            "analysis_method": "basic_fallback",
-            "timestamp": "$(date -Iseconds)"
-            }
-            EOF
+          {
+          "total_contacts": $CONTACT_COUNT,
+          "analysis_method": "basic_fallback",
+          "timestamp": "$(date -Iseconds)"
+          }
+          EOF
           fi
           
           # Read contact count from generated analysis
@@ -341,12 +341,12 @@ jobs:
             
             # Create basic analysis file
             cat > domain_analysis.json << EOF
-            {
-            "template_count": $TEMPLATE_COUNT,
-            "analysis_method": "basic_fallback",
-            "timestamp": "$(date -Iseconds)"
-            }
-            EOF
+          {
+          "template_count": $TEMPLATE_COUNT,
+          "analysis_method": "basic_fallback",
+          "timestamp": "$(date -Iseconds)"
+          }
+          EOF
           fi
           
           # Read template count from generated analysis
@@ -642,34 +642,34 @@ jobs:
             echo "No execution scripts found, creating basic fallback execution..."
             # Create a basic execution script inline
             python << 'EOF'
-            import sys
-            import os
-            import json
-            from datetime import datetime
+          import sys
+          import os
+          import json
+          from datetime import datetime
 
-            print("=== ENHANCED FALLBACK EXECUTION ===")
-            print(f"Arguments received: {sys.argv[1:]}")
-            print(f"Working directory: {os.getcwd()}")
-            print(f"Mode: DRY-RUN (no emails will be sent)")
+          print("=== ENHANCED FALLBACK EXECUTION ===")
+          print(f"Arguments received: {sys.argv[1:]}")
+          print(f"Working directory: {os.getcwd()}")
+          print(f"Mode: DRY-RUN (no emails will be sent)")
 
-            # Create basic execution log
-            execution_log = {
-            "status": "completed_fallback",
-            "timestamp": datetime.now().isoformat(),
-            "mode": "fallback_execution",
-            "message": "Enhanced fallback execution completed - no actual emails sent"
-            }
+          # Create basic execution log
+          execution_log = {
+          "status": "completed_fallback",
+          "timestamp": datetime.now().isoformat(),
+          "mode": "fallback_execution",
+          "message": "Enhanced fallback execution completed - no actual emails sent"
+          }
 
-            # Save execution result
-            os.makedirs("tracking", exist_ok=True)
-            with open("tracking/execution_result.json", "w") as f:
+          # Save execution result
+          os.makedirs("tracking", exist_ok=True)
+          with open("tracking/execution_result.json", "w") as f:
               json.dump(execution_log, f, indent=2)
 
-            print("✅ Enhanced fallback execution completed successfully")
-            print("No emails were sent - this is a safe fallback execution")
-            EOF
+          print("✅ Enhanced fallback execution completed successfully")
+          print("No emails were sent - this is a safe fallback execution")
+          EOF
             
-            EXECUTION_STATUS=$?
+          EXECUTION_STATUS=$?
           fi
           
           echo ""
@@ -707,20 +707,20 @@ jobs:
             echo "Report generation script not found, creating basic report"
             mkdir -p reports
             cat > reports/campaign_summary.md << EOF
-            # Enhanced Campaign Report
+          # Enhanced Campaign Report
 
-            **Workflow Run:** ${{ github.run_id }}
-            **Status:** Completed (Fallback Mode)
-            **Timestamp:** $(date)
+          **Workflow Run:** ${{ github.run_id }}
+          **Status:** Completed (Fallback Mode)
+          **Timestamp:** $(date)
 
-            ## Summary
-            - Mode: Enhanced fallback execution
-            - Contact files: ${{ needs.enhanced-validation-and-prepare.outputs.contact_files_count }}
-            - Contacts loaded: ${{ needs.enhanced-validation-and-prepare.outputs.contact_count }}
-            - Templates: ${{ needs.enhanced-validation-and-prepare.outputs.domain_campaigns }}
+          ## Summary
+          - Mode: Enhanced fallback execution
+          - Contact files: ${{ needs.enhanced-validation-and-prepare.outputs.contact_files_count }}
+          - Contacts loaded: ${{ needs.enhanced-validation-and-prepare.outputs.contact_count }}
+          - Templates: ${{ needs.enhanced-validation-and-prepare.outputs.domain_campaigns }}
 
-            This execution used fallback mode as primary scripts were not found.
-            EOF
+          This execution used fallback mode as primary scripts were not found.
+          EOF
           fi
 
       # Continue with remaining steps...
