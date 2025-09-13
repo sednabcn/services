@@ -198,20 +198,20 @@ jobs:
             echo "Validation script not found, running basic validation..."
             # Basic Python import validation
             cat > temp_validate.py << 'EOF'
-            import sys
-            import importlib
+          import sys
+          import importlib
 
-            def check_import(module):
+          def check_import(module):
               try:
                 importlib.import_module(module)
                 return True
               except ImportError:
                 return False
 
-            modules = ['requests', 'pandas', 'docx', 'openpyxl', 'jinja2']
-            failed = []
+          modules = ['requests', 'pandas', 'docx', 'openpyxl', 'jinja2']
+          failed = []
 
-            for module in modules:
+          for module in modules:
                 if check_import(module):
                   print('✅ {} - OK'.format(module))
                 else:
@@ -224,11 +224,11 @@ jobs:
                 else:
                   print('All core imports successful')
                   sys.exit(0)
-            EOF
+          EOF
 
-            python temp_validate.py
-            VALIDATION_STATUS=$?
-            rm temp_validate.py
+          python temp_validate.py
+          VALIDATION_STATUS=$?
+          rm temp_validate.py
 
           fi
           
