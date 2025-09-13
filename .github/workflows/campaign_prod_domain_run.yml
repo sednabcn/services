@@ -224,11 +224,11 @@ jobs:
                 else:
                   print('All core imports successful')
                   sys.exit(0)
-                EOF
+            EOF
 
-              python temp_validate.py
-              VALIDATION_STATUS=$?
-              rm temp_validate.py
+            python temp_validate.py
+            VALIDATION_STATUS=$?
+            rm temp_validate.py
 
           fi
           
