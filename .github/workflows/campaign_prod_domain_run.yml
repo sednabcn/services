@@ -197,10 +197,9 @@ jobs:
           else
             echo "Validation script not found, running basic validation..."
             # Basic Python import validation
-            python -c "
+            cat > temp_validate.py << 'EOF'
             import sys
             import importlib
-            import subprocess
 
             def check_import(module):
               try:
@@ -209,24 +208,28 @@ jobs:
               except ImportError:
                 return False
 
-            modules = ['requests', 'pandas', 'docx', 'openpyxl', 'jinja2']
-            failed = []
-            
-            for module in modules:
-              if check_import(module):
-                print(f'✅ {module} - OK')
-              else:
-                print(f'❌ {module} - FAILED')
-                failed.append(module)
+              modules = ['requests', 'pandas', 'docx', 'openpyxl', 'jinja2']
+              failed = []
 
-              if failed:
-                print(f'Failed imports: {failed}')
-                sys.exit(1)
-              else:
-                print('All core imports successful')
-                sys.exit(0) 
-              "  
-            VALIDATION_STATUS=$?
+              for module in modules:
+                if check_import(module):
+                  print('✅ {} - OK'.format(module))
+                else:
+                  print('❌ {} - FAILED'.format(module))
+                  failed.append(module)
+
+                if failed:
+                  print('Failed imports: {}'.format(failed))
+                  sys.exit(1)
+                else:
+                  print('All core imports successful')
+                  sys.exit(0)
+                EOF
+
+              python temp_validate.py
+              VALIDATION_STATUS=$?
+              rm temp_validate.py
+
           fi
           
           echo "status=$VALIDATION_STATUS" >> $GITHUB_OUTPUT
