@@ -197,35 +197,35 @@ jobs:
           else
             echo "Validation script not found, running basic validation..."
             # Basic Python import validation
-            python -c "
-import sys
-import importlib
-import subprocess
+            python -c """
+            import sys
+            import importlib
+            import subprocess
 
-def check_import(module):
-    try:
-        importlib.import_module(module)
-        return True
-    except ImportError:
-        return False
+            def check_import(module):
+              try:
+                importlib.import_module(module)
+                return True
+              except ImportError:
+                return False
 
-modules = ['requests', 'pandas', 'docx', 'openpyxl', 'jinja2']
-failed = []
+            modules = ['requests', 'pandas', 'docx', 'openpyxl', 'jinja2']
+            failed = []
+            
+            for module in modules:
+              if check_import(module):
+                print(f'✅ {module} - OK')
+              else:
+                print(f'❌ {module} - FAILED')
+                failed.append(module)
 
-for module in modules:
-    if check_import(module):
-        print(f'✅ {module} - OK')
-    else:
-        print(f'❌ {module} - FAILED')
-        failed.append(module)
-
-if failed:
-    print(f'Failed imports: {failed}')
-    sys.exit(1)
-else:
-    print('All core imports successful')
-    sys.exit(0)
-"
+              if failed:
+                print(f'Failed imports: {failed}')
+                sys.exit(1)
+              else:
+                print('All core imports successful')
+                sys.exit(0) """
+                
             VALIDATION_STATUS=$?
           fi
           
@@ -299,12 +299,12 @@ else:
             
             # Create basic analysis file
             cat > contact_analysis.json << EOF
-{
-  "total_contacts": $CONTACT_COUNT,
-  "analysis_method": "basic_fallback",
-  "timestamp": "$(date -Iseconds)"
-}
-EOF
+            {
+            "total_contacts": $CONTACT_COUNT,
+            "analysis_method": "basic_fallback",
+            "timestamp": "$(date -Iseconds)"
+            }
+            EOF
           fi
           
           # Read contact count from generated analysis
@@ -338,12 +338,12 @@ EOF
             
             # Create basic analysis file
             cat > domain_analysis.json << EOF
-{
-  "template_count": $TEMPLATE_COUNT,
-  "analysis_method": "basic_fallback",
-  "timestamp": "$(date -Iseconds)"
-}
-EOF
+            {
+            "template_count": $TEMPLATE_COUNT,
+            "analysis_method": "basic_fallback",
+            "timestamp": "$(date -Iseconds)"
+            }
+            EOF
           fi
           
           # Read template count from generated analysis
@@ -639,32 +639,33 @@ EOF
             echo "No execution scripts found, creating basic fallback execution..."
             # Create a basic execution script inline
             python << 'EOF'
-import sys
-import os
-import json
-from datetime import datetime
+            import sys
+            import os
+            import json
+            from datetime import datetime
 
-print("=== ENHANCED FALLBACK EXECUTION ===")
-print(f"Arguments received: {sys.argv[1:]}")
-print(f"Working directory: {os.getcwd()}")
-print(f"Mode: DRY-RUN (no emails will be sent)")
+            print("=== ENHANCED FALLBACK EXECUTION ===")
+            print(f"Arguments received: {sys.argv[1:]}")
+            print(f"Working directory: {os.getcwd()}")
+            print(f"Mode: DRY-RUN (no emails will be sent)")
 
-# Create basic execution log
-execution_log = {
-    "status": "completed_fallback",
-    "timestamp": datetime.now().isoformat(),
-    "mode": "fallback_execution",
-    "message": "Enhanced fallback execution completed - no actual emails sent"
-}
+            # Create basic execution log
+            execution_log = {
+            "status": "completed_fallback",
+            "timestamp": datetime.now().isoformat(),
+            "mode": "fallback_execution",
+            "message": "Enhanced fallback execution completed - no actual emails sent"
+            }
 
-# Save execution result
-os.makedirs("tracking", exist_ok=True)
-with open("tracking/execution_result.json", "w") as f:
-    json.dump(execution_log, f, indent=2)
+            # Save execution result
+            os.makedirs("tracking", exist_ok=True)
+            with open("tracking/execution_result.json", "w") as f:
+              json.dump(execution_log, f, indent=2)
 
-print("✅ Enhanced fallback execution completed successfully")
-print("No emails were sent - this is a safe fallback execution")
-EOF
+            print("✅ Enhanced fallback execution completed successfully")
+            print("No emails were sent - this is a safe fallback execution")
+            EOF
+            
             EXECUTION_STATUS=$?
           fi
           
@@ -703,20 +704,20 @@ EOF
             echo "Report generation script not found, creating basic report"
             mkdir -p reports
             cat > reports/campaign_summary.md << EOF
-# Enhanced Campaign Report
+            # Enhanced Campaign Report
 
-**Workflow Run:** ${{ github.run_id }}
-**Status:** Completed (Fallback Mode)
-**Timestamp:** $(date)
+            **Workflow Run:** ${{ github.run_id }}
+            **Status:** Completed (Fallback Mode)
+            **Timestamp:** $(date)
 
-## Summary
-- Mode: Enhanced fallback execution
-- Contact files: ${{ needs.enhanced-validation-and-prepare.outputs.contact_files_count }}
-- Contacts loaded: ${{ needs.enhanced-validation-and-prepare.outputs.contact_count }}
-- Templates: ${{ needs.enhanced-validation-and-prepare.outputs.domain_campaigns }}
+            ## Summary
+            - Mode: Enhanced fallback execution
+            - Contact files: ${{ needs.enhanced-validation-and-prepare.outputs.contact_files_count }}
+            - Contacts loaded: ${{ needs.enhanced-validation-and-prepare.outputs.contact_count }}
+            - Templates: ${{ needs.enhanced-validation-and-prepare.outputs.domain_campaigns }}
 
-This execution used fallback mode as primary scripts were not found.
-EOF
+            This execution used fallback mode as primary scripts were not found.
+            EOF
           fi
 
       # Continue with remaining steps...
@@ -731,108 +732,108 @@ EOF
           EXECUTION_STATUS=$([ -f execution.log ] && echo "0" || echo "1")
           
           python -c """
-import sys
-import os
-import requests
-import json
-from datetime import datetime
+          import sys
+          import os
+          import requests
+          import json
+          from datetime import datetime
 
-github_token = os.environ.get('GITHUB_TOKEN')
-if not github_token:
-  print('No GitHub token available - skipping issue creation')
-  sys.exit(0)
+          github_token = os.environ.get('GITHUB_TOKEN')
+          if not github_token:
+            print('No GitHub token available - skipping issue creation')
+            sys.exit(0)
 
-repo = '${{ github.repository }}'
-execution_status = os.environ.get('EXECUTION_STATUS', 'unknown')
+          repo = '${{ github.repository }}'
+          execution_status = os.environ.get('EXECUTION_STATUS', 'unknown')
 
-# Enhanced status determination
-if execution_status == '0':
-  status_emoji = '✅ SUCCESS'
-  priority = 'success'
-else:
-  status_emoji = '❌ ISSUES DETECTED'
-  priority = 'error'
+          # Enhanced status determination
+          if execution_status == '0':
+            status_emoji = '✅ SUCCESS'
+            priority = 'success'
+          else:
+            status_emoji = '❌ ISSUES DETECTED'
+            priority = 'error'
 
-title = f'Enhanced Campaign Report - {status_emoji} - Run ${{ github.run_id }}'
+          title = f'Enhanced Campaign Report - {status_emoji} - Run ${{ github.run_id }}'
 
-body = f'''# Enhanced Email Campaign Execution Report
+          body = f''' # Enhanced Email Campaign Execution Report
 
-## 🎯 Executive Summary
-**Workflow Run ID:** ${{ github.run_id }}  
-**Final Status:** {status_emoji}  
-**Execution Mode:** ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}  
-**Real Data Sources:** ${{ needs.enhanced-validation-and-prepare.outputs.real_data_found }}  
-**Priority:** {priority.upper()}
+          ## 🎯 Executive Summary
+          **Workflow Run ID:** ${{ github.run_id }}  
+          **Final Status:** {status_emoji}  
+          **Execution Mode:** ${{ github.event.inputs.dry_run == 'true' && 'DRY-RUN' || 'LIVE' }}  
+          **Real Data Sources:** ${{ needs.enhanced-validation-and-prepare.outputs.real_data_found }}  
+          **Priority:** {priority.upper()}
 
-## 📊 Enhanced Metrics
-**Contact Data:**
-- Files Found: ${{ needs.enhanced-validation-and-prepare.outputs.contact_files_count }}
-- Contacts Loaded: ${{ needs.enhanced-validation-and-prepare.outputs.contact_count }}
-- Real Data Used: ${{ needs.enhanced-validation-and-prepare.outputs.real_data_found }}
+          ## 📊 Enhanced Metrics
+          **Contact Data:**
+          - Files Found: ${{ needs.enhanced-validation-and-prepare.outputs.contact_files_count }}
+          - Contacts Loaded: ${{ needs.enhanced-validation-and-prepare.outputs.contact_count }}
+          - Real Data Used: ${{ needs.enhanced-validation-and-prepare.outputs.real_data_found }}
 
-**Campaign Data:**
-- Templates Available: ${{ needs.enhanced-validation-and-prepare.outputs.domain_campaigns }}
-- Target Domain: ${{ github.event.inputs.target_domain || 'All domains' }}
-- Batch Size: ${{ github.event.inputs.batch_size || 50 }}
+          **Campaign Data:**
+          - Templates Available: ${{ needs.enhanced-validation-and-prepare.outputs.domain_campaigns }}
+          - Target Domain: ${{ github.event.inputs.target_domain || 'All domains' }}
+          - Batch Size: ${{ github.event.inputs.batch_size || 50 }}
 
-**Enhanced Features:**
-- ✅ Template Variable Processing ({{{{name}}}}, {{{{email}}}}, etc.)
-- ✅ Multi-source Data Loading (CSV, Excel, Google Sheets)
-- ✅ Feedback Injection System
-- ✅ Real-time Reply Tracking
-- ✅ Comprehensive Validation
-- ✅ Enhanced Error Handling
+          **Enhanced Features:**
+          - ✅ Template Variable Processing ({{{{name}}}}, {{{{email}}}}, etc.)
+          - ✅ Multi-source Data Loading (CSV, Excel, Google Sheets)
+          - ✅ Feedback Injection System
+          - ✅ Real-time Reply Tracking
+          - ✅ Comprehensive Validation
+          - ✅ Enhanced Error Handling
 
-## 🔧 System Integration Status
-**Core Components:**
-- utils/docx_parser.py: ENHANCED MODE
-- scripts/execution/enhanced_fallback_execution.py: FALLBACK READY
-- scripts/tracking/reply_analysis.py: ACTIVE
-- scripts/tracking/generate_reports.py: ACTIVE
-- scripts/utils/setup_directories.py: INTEGRATED
+          ## 🔧 System Integration Status
+          **Core Components:**
+          - utils/docx_parser.py: ENHANCED MODE
+          - scripts/execution/enhanced_fallback_execution.py: FALLBACK READY
+          - scripts/tracking/reply_analysis.py: ACTIVE
+          - scripts/tracking/generate_reports.py: ACTIVE
+          - scripts/utils/setup_directories.py: INTEGRATED
 
-**Configuration:**
-- Real-time Tracking: ${{ github.event.inputs.enable_real_time_tracking }}
-- Debug Mode: ${{ github.event.inputs.debug_mode }}
-- Feedback Injection: ${{ github.event.inputs.skip_feedback_injection != 'true' && 'ENABLED' || 'DISABLED' }}
+          **Configuration:**
+          - Real-time Tracking: ${{ github.event.inputs.enable_real_time_tracking }}
+          - Debug Mode: ${{ github.event.inputs.debug_mode }}
+          - Feedback Injection: ${{ github.event.inputs.skip_feedback_injection != 'true' && 'ENABLED' || 'DISABLED' }}
 
----
-*Enhanced Campaign System - Production Ready*  
-*Generated: $(date)*
-'''
+          ---
+          *Enhanced Campaign System - Production Ready*  
+          *Generated: $(date)*
+          '''
 
-try:
-  headers = {
-      'Authorization': f'token {github_token}',
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'Enhanced-Campaign-Workflow'
-  }
+          try:
+            headers = {
+            'Authorization': f'token {github_token}',
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Enhanced-Campaign-Workflow'
+            }
 
-  data = {
-      'title': title,
-      'body': body,
-      'labels': ['enhanced-campaign', 'production', priority, 'automated']
-  }
+            data = {
+            'title': title,
+            'body': body,
+            'labels': ['enhanced-campaign', 'production', priority, 'automated']
+            }
 
-  response = requests.post(
-      f'https://api.github.com/repos/{repo}/issues',
-      headers=headers,
-      data=json.dumps(data),
-      timeout=30
-  )
+            response = requests.post(
+            f'https://api.github.com/repos/{repo}/issues',
+            headers=headers,
+            data=json.dumps(data),
+            timeout=30
+            )
 
-  if response.status_code == 201:
-    issue_data = response.json()
-    print(f'Created enhanced issue #{issue_data[\"number\"]}: {title}')
-    print(f'Issue URL: {issue_data[\"html_url\"]}')
-  else:
-    print(f'Failed to create issue: {response.status_code}')
-    print(f'Response: {response.text[:500]}')
+            if response.status_code == 201:
+              issue_data = response.json()
+              print(f'Created enhanced issue #{issue_data[\"number\"]}: {title}')
+              print(f'Issue URL: {issue_data[\"html_url\"]}')
+            else:
+              print(f'Failed to create issue: {response.status_code}')
+              print(f'Response: {response.text[:500]}')
 
-except Exception as e:
-  print(f'Error creating enhanced GitHub issue: {e}')
-"""
+          except Exception as e:
+            print(f'Error creating enhanced GitHub issue: {e}')"""
 
+            
       - name: Upload comprehensive enhanced artifacts
         uses: actions/upload-artifact@v4
         if: always()
