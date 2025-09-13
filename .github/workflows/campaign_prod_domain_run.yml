@@ -135,7 +135,7 @@ jobs:
       - name: Create enhanced directory structure with absolute paths
         run: |
           echo "Creating enhanced directory structure using setup script..."
-          python scripts/utils/setup_directories.py
+          python .github/scripts/utils/setup_directories.py
           
           echo "Enhanced directory structure created and verified"
 
@@ -153,7 +153,7 @@ jobs:
         id: validation
         run: |
           echo "Running comprehensive system validation..."
-          python scripts/validation/validate_imports.py
+          python .github/scripts/validation/validate_imports.py
           echo "status=$?" >> $GITHUB_OUTPUT
           echo "report=System validation completed" >> $GITHUB_OUTPUT
 
@@ -205,7 +205,7 @@ jobs:
           export CONTACTS_DIR="$CONTACTS_DIR"
           export CONTACT_SOURCE="${{ github.event.inputs.contact_source }}"
           
-          python scripts/validation/analyze_contacts.py
+          python .github/scripts/validation/analyze_contacts.py
           
           # Read contact count from generated analysis
           CONTACT_COUNT=0
@@ -222,7 +222,7 @@ jobs:
           export TEMPLATES_DIR="$TEMPLATES_DIR"
           export SCHEDULED_DIR="$SCHEDULED_DIR"
           
-          python scripts/validation/analyze_templates.py
+          python .github/scripts/validation/analyze_templates.py
           
           # Read template count from generated analysis
           TEMPLATE_COUNT=0
@@ -391,13 +391,13 @@ jobs:
           fi
           
           # Enhanced email configuration validation using script
-          python scripts/execution/email_validation.py --input "test@example.com" --level basic --verbose || echo "Email validation service available"
+          python .github/scripts/execution/email_validation.py --input "test@example.com" --level basic --verbose || echo "Email validation service available"
 
       - name: Enhanced feedback system setup
         if: github.event.inputs.skip_feedback_injection != 'true'
         run: |
           echo "Setting up enhanced feedback and tracking systems..."
-          python scripts/utils/setup_directories.py
+          python .github/scripts/utils/setup_directories.py
           
           # Initialize enhanced tracking metadata
           cat > tracking/execution_start.json << EOF
@@ -496,7 +496,7 @@ jobs:
             EXECUTION_STATUS=$?
           else
             echo "Primary campaign processor not found, using enhanced fallback execution..."
-            python scripts/execution/enhanced_fallback_execution.py "${ARGS[@]}" 2>&1 | tee execution.log
+            python .github/scripts/execution/enhanced_fallback_execution.py "${ARGS[@]}" 2>&1 | tee execution.log
             EXECUTION_STATUS=$?
           fi
           
@@ -517,12 +517,12 @@ jobs:
           echo "Processing enhanced real-time feedback and replies..."
           
           # Enhanced reply tracking using external script
-          python scripts/tracking/reply_analysis.py --tracking-dir tracking/ --enhanced-mode --verbose || echo "Reply tracking completed with warnings"
+          python .github/scripts/tracking/reply_analysis.py --tracking-dir tracking/ --enhanced-mode --verbose || echo "Reply tracking completed with warnings"
 
       - name: Generate comprehensive enhanced campaign report
         run: |
           echo "Generating comprehensive enhanced campaign report..."
-          python scripts/tracking/generate_reports.py --tracking-dir tracking/ --reports-dir reports/ --verbose
+          python .github/scripts/tracking/generate_reports.py --tracking-dir tracking/ --reports-dir reports/ --verbose
 
       - name: Create enhanced GitHub issue notification
         if: always()
@@ -671,7 +671,7 @@ jobs:
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Enhanced System Features" >> $GITHUB_STEP_SUMMARY
-          echo "- **Script Architecture:** External Python scripts for maintainability" >> $GITHUB_STEP_SUMMARY
+          echo "- **Script Architecture:** External python .github/scriptsfor maintainability" >> $GITHUB_STEP_SUMMARY
           echo "- **Template Processing:** Variable substitution active" >> $GITHUB_STEP_SUMMARY
           echo "- **Multi-source Data:** CSV, Excel, Google Sheets supported" >> $GITHUB_STEP_SUMMARY
           echo "- **Feedback System:** Injection and tracking integrated" >> $GITHUB_STEP_SUMMARY
@@ -697,7 +697,7 @@ jobs:
       - name: Enhanced cleanup of sensitive data using script
         run: |
           echo "Enhanced cleanup of sensitive data and temporary files..."
-          python scripts/utils/cleanup.py --preserve-logs || echo "Cleanup completed with warnings"
+          python .github/scripts/utils/cleanup.py --preserve-logs || echo "Cleanup completed with warnings"
 
       - name: Generate enhanced cleanup report
         run: |
@@ -759,7 +759,7 @@ jobs:
           echo "Execution Status: ${{ needs.enhanced-campaign-execution.result }}"
           
           # Generate comprehensive final report using external script
-          python scripts/tracking/generate_reports.py \
+          python .github/scripts/tracking/generate_reports.py \
             --tracking-dir tracking \
             --reports-dir reports \
             --format all \
@@ -798,7 +798,7 @@ jobs:
         run: |
           echo "### Enhanced Email Campaign System - Final Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Script Architecture:** External Python scripts for improved maintainability" >> $GITHUB_STEP_SUMMARY
+          echo "**Script Architecture:** External python .github/scripts for improved maintainability" >> $GITHUB_STEP_SUMMARY
           echo "**Workflow Execution Summary**" >> $GITHUB_STEP_SUMMARY
           echo "- **Run ID:** ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Validation Job:** ${{ needs.enhanced-validation-and-prepare.result }}" >> $GITHUB_STEP_SUMMARY
@@ -826,7 +826,7 @@ jobs:
           echo "- Debug Mode: ${{ github.event.inputs.debug_mode || 'false' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Architecture Benefits**" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Maintainable external Python scripts" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Maintainable external Python .github/scripts" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Fallback execution system" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Comprehensive error handling" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Advanced reporting and analytics" >> $GITHUB_STEP_SUMMARY
