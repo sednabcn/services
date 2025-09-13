@@ -197,7 +197,7 @@ jobs:
           else
             echo "Validation script not found, running basic validation..."
             # Basic Python import validation
-            python -c """
+            python -c "
             import sys
             import importlib
             import subprocess
@@ -224,8 +224,8 @@ jobs:
                 sys.exit(1)
               else:
                 print('All core imports successful')
-                sys.exit(0) """
-                
+                sys.exit(0) 
+              "  
             VALIDATION_STATUS=$?
           fi
           
