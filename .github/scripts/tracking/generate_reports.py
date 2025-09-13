@@ -227,6 +227,7 @@ class CampaignReportGenerator:
             'bounce_rate': (total_bounces / total_replies * 100) if total_replies > 0 else 0,
             'response_rate': (total_replies / total_emails_sent * 100) if total_emails_sent > 0 else 0,
             'positive_rate': (total_positive / total_replies * 100) if total_replies > 0 else 0,
+             'negative_rate': (total_negative / total_replies * 100) if total_replies > 0 else 0,  # ADD THIS LINE
             'unsubscribe_rate': (total_unsubscribes / total_replies * 100) if total_replies > 0 else 0
         }
         
