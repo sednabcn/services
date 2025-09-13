@@ -208,10 +208,10 @@ jobs:
               except ImportError:
                 return False
 
-              modules = ['requests', 'pandas', 'docx', 'openpyxl', 'jinja2']
-              failed = []
+            modules = ['requests', 'pandas', 'docx', 'openpyxl', 'jinja2']
+            failed = []
 
-              for module in modules:
+            for module in modules:
                 if check_import(module):
                   print('✅ {} - OK'.format(module))
                 else:
